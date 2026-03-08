@@ -1,0 +1,6 @@
+## Interface: 120001
+## Title: Kaneri Tool
+## Notes: Configuración personalizada de visibilidad de barras.
+## SavedVariables: Kaneri_Tool_Settings
+
+core.lua
