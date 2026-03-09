@@ -1,7 +1,6 @@
--- 1. Registro del Comando con Toggle, Auto-Centrado y Carga Forzada
+-- 1. Registro del Comando con Toggle y Seguridad de Carga
 SLASH_KT1 = "/kt"
 SlashCmdList["KT"] = function(msg)
-    -- Si por alguna razón la UI no existe (ej. carga fallida), la creamos al momento
     if not KaneriToolOptionsPanel then SetupUI() end
     
     if msg == "toggle" then
@@ -17,7 +16,6 @@ SlashCmdList["KT"] = function(msg)
             KaneriToolOptionsPanel:Hide() 
             if KaneriToolConfigPanel then KaneriToolConfigPanel:Hide() end
         else 
-            -- SEGURIDAD: Siempre aparece en el centro al abrirse con /kt
             KaneriToolOptionsPanel:ClearAllPoints()
             KaneriToolOptionsPanel:SetPoint("CENTER", UIParent, "CENTER")
             KaneriToolOptionsPanel:Show() 
@@ -115,7 +113,7 @@ sellFrame:SetScript("OnEvent", function()
     end
 end)
 
--- 6. INTERFAZ DE USUARIO (Mantenidas todas las funciones)
+-- 6. INTERFAZ DE USUARIO
 local function UpdateZoneBtn(btn, val)
     if val == 1 then btn:SetText("VISIBLE"); btn.Text:SetTextColor(0, 1, 0)
     elseif val == -1 then btn:SetText("OCULTO"); btn.Text:SetTextColor(1, 0, 0)
@@ -123,7 +121,7 @@ local function UpdateZoneBtn(btn, val)
 end
 
 function SetupUI()
-    if KaneriToolOptionsPanel then return end -- Evitar duplicados
+    if KaneriToolOptionsPanel then return end
 
     local panel = CreateFrame("Frame", "KaneriToolOptionsPanel", UIParent, "BackdropTemplate")
     panel:SetSize(240, 160); panel:SetPoint("CENTER"); panel:Hide()
@@ -223,7 +221,7 @@ function SetupUI()
     CreateGlobalSlider("KaneriGlobalDelay", "Retraso", -160, 0, 30, "delay")
     CreateGlobalSlider("KaneriGlobalAlpha", "Opacidad Máxima", 160, 0.1, 1, "alpha")
 
-    -- SCROLL Y LISTA DE BARRAS
+    -- SCROLL Y LISTA DE BARRAS (DINÁMICA)
     local scrollFrame = CreateFrame("ScrollFrame", "KaneriConfigScroll", configPanel, "UIPanelScrollFrameTemplate")
     scrollFrame:SetPoint("TOPLEFT", 25, -305); scrollFrame:SetPoint("BOTTOMRIGHT", -35, 35)
     local scrollChild = CreateFrame("Frame")
@@ -231,6 +229,12 @@ function SetupUI()
     scrollFrame:SetScrollChild(scrollChild)
 
     for i, data in ipairs(barList) do
+        -- ASEGURAR DATOS DE BARRA ANTES DE CREAR LA FILA
+        if not Kaneri_Tool_Settings.Bars[data.id] then
+            local d = Kaneri_Tool_Settings.GlobalConfig
+            Kaneri_Tool_Settings.Bars[data.id] = { enabled = false, isCustom = false, customConfig = CopyTable(d) }
+        end
+
         local y = -((i-1) * 35)
         local row = CreateFrame("Frame", nil, scrollChild)
         row:SetSize(720, 32); row:SetPoint("TOPLEFT", 0, y)
@@ -297,9 +301,9 @@ function SetupUI()
     CreateFrame("Button", nil, configPanel, "UIPanelCloseButton"):SetPoint("TOPRIGHT", -5, -5)
 end
 
--- 7. Carga Robusta (Al entrar al mundo)
+-- 7. Carga Segura
 local ldr = CreateFrame("Frame")
-ldr:RegisterEvent("PLAYER_ENTERING_WORLD")
+ldr:RegisterEvent("PLAYER_LOGIN")
 ldr:SetScript("OnEvent", function(self)
     local d = { visibilidadActiva=true, autoRepair=true, autoSell=true, combat=true, harm=true, exists=true, stealth=false, flying=true, z_party=0, z_raid=0, z_city=0, z_delve=0, z_world=0, delay=2, alpha=1 }
     
@@ -307,6 +311,7 @@ ldr:SetScript("OnEvent", function(self)
         Kaneri_Tool_Settings = { GlobalConfig = d, Bars = {} } 
     end
     
+    -- Inicializar barras si la tabla está vacía
     for _, data in ipairs(barList) do
         if not Kaneri_Tool_Settings.Bars[data.id] then
             Kaneri_Tool_Settings.Bars[data.id] = { enabled = false, isCustom = false, customConfig = CopyTable(d) }
