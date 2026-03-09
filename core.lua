@@ -95,10 +95,24 @@ panel:SetBackdrop({bgFile = "Interface\\ChatFrame\\ChatFrameBackground", edgeFil
 panel:SetBackdropColor(0, 0, 0, 0.9); panel:SetMovable(true); panel:EnableMouse(true); panel:RegisterForDrag("LeftButton")
 panel:SetScript("OnDragStart", panel.StartMoving); panel:SetScript("OnDragStop", panel.StopMovingOrSizing)
 
+-- PANEL DE CONFIGURACIÓN (Ajuste para API moderna)
 local configPanel = CreateFrame("Frame", "KaneriToolConfigPanel", panel, "BackdropTemplate")
-configPanel:SetSize(800, 710); configPanel:SetPoint("TOPLEFT", panel, "TOPRIGHT", 10, 0); configPanel:Hide()
+configPanel:SetSize(800, 720); configPanel:SetPoint("TOPLEFT", panel, "TOPRIGHT", 10, 0); configPanel:Hide()
 configPanel:SetBackdrop({bgFile = "Interface\\ChatFrame\\ChatFrameBackground", edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border", tile = true, tileSize = 32, edgeSize = 32, insets = { 8, 8, 8, 8 }})
 configPanel:SetBackdropColor(0, 0, 0, 0.95)
+
+-- ARREGLO PARA RESIZE (API MODERNA)
+configPanel:SetResizable(true)
+if configPanel.SetResizeBounds then
+    configPanel:SetResizeBounds(800, 500, 800, 1000)
+end
+
+local rb = CreateFrame("Button", nil, configPanel)
+rb:SetPoint("BOTTOMRIGHT", -8, 8); rb:SetSize(16, 16)
+rb:SetNormalTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Up")
+rb:SetHighlightTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Highlight")
+rb:SetScript("OnMouseDown", function() configPanel:StartSizing("BOTTOMRIGHT") end)
+rb:SetScript("OnMouseUp", function() configPanel:StopMovingOrSizing() end)
 
 local function UpdateZoneBtn(btn, val)
     if val == 1 then btn:SetText("VISIBLE"); btn.Text:SetTextColor(0, 1, 0)
@@ -133,20 +147,20 @@ local function SetupUI()
 
     CreateFrame("Button", nil, panel, "UIPanelCloseButton"):SetPoint("TOPRIGHT", -2, -2)
 
-    -- PANEL DE CONFIGURACIÓN (REORDENADO)
+    -- PANEL DE CONFIGURACIÓN
     local cfgTitle = configPanel:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
     cfgTitle:SetPoint("TOP", 0, -20); cfgTitle:SetText("Configuración de Visibilidad")
 
-    -- SECCIÓN IZQUIERDA: ZONAS (Antigua Sección 2)
+    -- ZONAS (IZQ) Y CONDICIONES (DER)
     local sZonas = configPanel:CreateFontString(nil, "ARTWORK", "GameFontNormal")
     sZonas:SetPoint("TOPLEFT", 40, -60); sZonas:SetText("Reglas por Zona (Global)")
     
     local zDefs = {{l="Exteriores", c="z_world"}, {l="Ciudades", c="z_city"}, {l="Profundidades", c="z_delve"}, {l="Mazmorras", c="z_party"}, {l="Bandas", c="z_raid"}}
     for i, z in ipairs(zDefs) do
         local l = configPanel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-        l:SetPoint("TOPLEFT", 50, -65 - (i * 28)); l:SetText(z.l)
+        l:SetPoint("TOPLEFT", 50, -65 - (i * 26)); l:SetText(z.l)
         local b = CreateFrame("Button", nil, configPanel, "UIPanelButtonTemplate")
-        b:SetSize(100, 20); b:SetPoint("LEFT", l, "RIGHT", 60, 0)
+        b:SetSize(100, 18); b:SetPoint("LEFT", l, "RIGHT", 60, 0)
         UpdateZoneBtn(b, Kaneri_Tool_Settings.GlobalConfig[z.c])
         b:SetScript("OnClick", function(self)
             local cur = Kaneri_Tool_Settings.GlobalConfig[z.c]
@@ -155,27 +169,42 @@ local function SetupUI()
         end)
     end
 
-    -- SECCIÓN DERECHA: CONDICIONES AUTO (Antigua Sección 3)
     local sConds = configPanel:CreateFontString(nil, "ARTWORK", "GameFontNormal")
     sConds:SetPoint("TOPLEFT", 420, -60); sConds:SetText("Condiciones 'AUTO' (Global)")
     
     local cDefs = {{l="En Combate", c="combat"}, {l="Objetivo Hostil", c="harm"}, {l="Tener Objetivo", c="exists"}, {l="En Sigilo", c="stealth"}, {l="|cff00ccffVolando|r", c="flying"}}
     for i, cond in ipairs(cDefs) do
         local cb = CreateFrame("CheckButton", nil, configPanel, "InterfaceOptionsCheckButtonTemplate")
-        cb:SetPoint("TOPLEFT", 430, -65 - (i * 28))
+        cb:SetPoint("TOPLEFT", 430, -65 - (i * 26))
         cb.Text:SetText(cond.l); cb:SetChecked(Kaneri_Tool_Settings.GlobalConfig[cond.c])
         cb:SetScript("OnClick", function(self) Kaneri_Tool_Settings.GlobalConfig[cond.c] = self:GetChecked() end)
     end
 
-    -- SECCIÓN INFERIOR: BARRAS (Antigua Sección 1)
+    -- SECCIÓN SLIDER (Aislada entre bloques)
+    local sliderBox = CreateFrame("Frame", nil, configPanel)
+    sliderBox:SetPoint("TOP", 0, -215); sliderBox:SetSize(720, 50)
+    
+    local slider = CreateFrame("Slider", "KaneriDelaySlider", sliderBox, "OptionsSliderTemplate")
+    slider:SetPoint("CENTER", 0, 0); slider:SetWidth(500)
+    slider:SetMinMaxValues(0, 30); slider:SetValueStep(1); slider:SetObeyStepOnDrag(true)
+    slider:SetValue(Kaneri_Tool_Settings.GlobalConfig.delay or 2)
+    _G[slider:GetName()..'Text']:SetText("Retraso Global: "..slider:GetValue().."s")
+    slider:SetScript("OnValueChanged", function(self, v)
+        local val = math.floor(v)
+        _G[self:GetName()..'Text']:SetText("Retraso Global: "..val.."s")
+        Kaneri_Tool_Settings.GlobalConfig.delay = val
+    end)
+
+    -- SECCIÓN INFERIOR: BARRAS
     local sep = configPanel:CreateTexture(nil, "ARTWORK")
-    sep:SetSize(720, 1); sep:SetColorTexture(1, 1, 1, 0.2); sep:SetPoint("TOP", 0, -240)
+    sep:SetSize(720, 1); sep:SetColorTexture(1, 1, 1, 0.1); sep:SetPoint("TOP", sliderBox, "BOTTOM", 0, -5)
 
     local sBars = configPanel:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-    sBars:SetPoint("TOPLEFT", 30, -255); sBars:SetText("Configuración de Elementos Individuales")
+    sBars:SetPoint("TOPLEFT", 30, -280); sBars:SetText("Configuración de Elementos Individuales")
 
-    local scrollFrame = CreateFrame("ScrollFrame", nil, configPanel, "UIPanelScrollFrameTemplate")
-    scrollFrame:SetSize(740, 360); scrollFrame:SetPoint("TOPLEFT", 25, -280)
+    local scrollFrame = CreateFrame("ScrollFrame", "KaneriConfigScroll", configPanel, "UIPanelScrollFrameTemplate")
+    scrollFrame:SetPoint("TOPLEFT", 25, -305); scrollFrame:SetPoint("BOTTOMRIGHT", -35, 35)
+    
     local scrollChild = CreateFrame("Frame")
     scrollChild:SetSize(720, 420)
     scrollFrame:SetScrollChild(scrollChild)
@@ -232,18 +261,6 @@ local function SetupUI()
         end)
         Refresh()
     end
-
-    -- Slider de Retraso al fondo
-    local slider = CreateFrame("Slider", "KaneriDelaySlider", configPanel, "OptionsSliderTemplate")
-    slider:SetPoint("BOTTOM", 0, 30); slider:SetWidth(600)
-    slider:SetMinMaxValues(0, 30); slider:SetValueStep(1); slider:SetObeyStepOnDrag(true)
-    slider:SetValue(Kaneri_Tool_Settings.GlobalConfig.delay or 2)
-    _G[slider:GetName()..'Text']:SetText("Retraso Global antes de ocultar: "..slider:GetValue().."s")
-    slider:SetScript("OnValueChanged", function(self, v)
-        local val = math.floor(v)
-        _G[self:GetName()..'Text']:SetText("Retraso Global antes de ocultar: "..val.."s")
-        Kaneri_Tool_Settings.GlobalConfig.delay = val
-    end)
 
     CreateFrame("Button", nil, configPanel, "UIPanelCloseButton"):SetPoint("TOPRIGHT", -5, -5)
 end
