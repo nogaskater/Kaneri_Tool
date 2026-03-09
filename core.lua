@@ -89,9 +89,9 @@ sellFrame:SetScript("OnEvent", function()
     end
 end)
 
--- 6. Interfaz de Usuario
+-- 6. Interfaz de Usuario (ANCHO AUMENTADO)
 local panel = CreateFrame("Frame", "KaneriToolOptionsPanel", UIParent, "BackdropTemplate")
-panel:SetSize(460, 710); panel:SetPoint("CENTER"); panel:Hide()
+panel:SetSize(800, 710); panel:SetPoint("CENTER"); panel:Hide()
 panel:SetBackdrop({bgFile = "Interface\\ChatFrame\\ChatFrameBackground", edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border", tile = true, tileSize = 32, edgeSize = 32, insets = { 8, 8, 8, 8 }})
 panel:SetBackdropColor(0, 0, 0, 0.95); panel:SetMovable(true); panel:EnableMouse(true); panel:RegisterForDrag("LeftButton")
 panel:SetScript("OnDragStart", panel.StartMoving); panel:SetScript("OnDragStop", panel.StopMovingOrSizing)
@@ -108,74 +108,77 @@ local function SetupUI()
 
     -- Superior
     local masterCB = CreateFrame("CheckButton", "KaneriToolMasterCB", panel, "InterfaceOptionsCheckButtonTemplate")
-    masterCB:SetPoint("TOPLEFT", 30, -45); masterCB.Text:SetText("|cff00ff00HUD SIEMPRE ON|r")
+    masterCB:SetPoint("TOPLEFT", 100, -45); masterCB.Text:SetText("|cff00ff00HUD SIEMPRE ON|r")
     masterCB:SetChecked(Kaneri_Tool_Settings.GlobalConfig.forceShowAll)
     masterCB:SetScript("OnClick", function(self) Kaneri_Tool_Settings.GlobalConfig.forceShowAll = self:GetChecked() end)
 
     local repairCB = CreateFrame("CheckButton", nil, panel, "InterfaceOptionsCheckButtonTemplate")
-    repairCB:SetPoint("TOPLEFT", 210, -45); repairCB.Text:SetText("|cffffff00REPARAR|r")
+    repairCB:SetPoint("TOPLEFT", 350, -45); repairCB.Text:SetText("|cffffff00REPARAR|r")
     repairCB:SetChecked(Kaneri_Tool_Settings.GlobalConfig.autoRepair)
     repairCB:SetScript("OnClick", function(self) Kaneri_Tool_Settings.GlobalConfig.autoRepair = self:GetChecked() end)
 
     local sellCB = CreateFrame("CheckButton", nil, panel, "InterfaceOptionsCheckButtonTemplate")
-    sellCB:SetPoint("TOPLEFT", 330, -45); sellCB.Text:SetText("|cffaaaaaaVENDER|r")
+    sellCB:SetPoint("TOPLEFT", 550, -45); sellCB.Text:SetText("|cffaaaaaaVENDER|r")
     sellCB:SetChecked(Kaneri_Tool_Settings.GlobalConfig.autoSell)
     sellCB:SetScript("OnClick", function(self) Kaneri_Tool_Settings.GlobalConfig.autoSell = self:GetChecked() end)
 
-    -- 1. ELEMENTOS (Nueva Estructura Vertical)
+    -- 1. ELEMENTOS (Estructura Ancha)
     local s1 = panel:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-    s1:SetPoint("TOPLEFT", 30, -85); s1:SetText("1. Elementos y Ajustes Custom")
+    s1:SetPoint("TOPLEFT", 30, -85); s1:SetText("1. Configuración de Elementos (Individual)")
 
     local scrollFrame = CreateFrame("ScrollFrame", nil, panel, "UIPanelScrollFrameTemplate")
-    scrollFrame:SetSize(400, 210); scrollFrame:SetPoint("TOPLEFT", 25, -105)
+    scrollFrame:SetSize(740, 220); scrollFrame:SetPoint("TOPLEFT", 25, -110)
     local scrollChild = CreateFrame("Frame")
-    scrollChild:SetSize(380, 400)
+    scrollChild:SetSize(720, 400)
     scrollFrame:SetScrollChild(scrollChild)
 
     for i, data in ipairs(barList) do
-        local y = -((i-1) * 26)
+        local y = -((i-1) * 30)
         local row = CreateFrame("Frame", nil, scrollChild)
-        row:SetSize(380, 24); row:SetPoint("TOPLEFT", 0, y)
+        row:SetSize(720, 28); row:SetPoint("TOPLEFT", 0, y)
 
         -- Checkbox principal
         local cb = CreateFrame("CheckButton", nil, row, "InterfaceOptionsCheckButtonTemplate")
-        cb:SetPoint("LEFT", 5, 0); cb:SetSize(22, 22)
+        cb:SetPoint("LEFT", 5, 0); cb:SetSize(24, 24)
         cb:SetChecked(Kaneri_Tool_Settings.Bars[data.id].enabled)
         cb:SetScript("OnClick", function(self) Kaneri_Tool_Settings.Bars[data.id].enabled = self:GetChecked() end)
 
-        -- Boton G/C entre tick y nombre
+        -- Boton GLOBAL / CUSTOM (Más ancho)
         local mBtn = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
-        mBtn:SetSize(20, 16); mBtn:SetPoint("LEFT", cb, "RIGHT", 0, 0)
+        mBtn:SetSize(80, 20); mBtn:SetPoint("LEFT", cb, "RIGHT", 5, 0)
         
         -- Etiqueta nombre
-        local txt = row:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-        txt:SetPoint("LEFT", mBtn, "RIGHT", 5, 0); txt:SetText(data.label); txt:SetWidth(100); txt:SetJustifyH("LEFT")
+        local txt = row:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+        txt:SetPoint("LEFT", mBtn, "RIGHT", 10, 0); txt:SetText(data.label); txt:SetWidth(140); txt:SetJustifyH("LEFT")
 
-        -- Contenedor de Opciones Custom (aparece al lado si es C)
+        -- Contenedor de Opciones Custom (Palabras completas)
         local optFrame = CreateFrame("Frame", nil, row)
-        optFrame:SetSize(200, 24); optFrame:SetPoint("LEFT", txt, "RIGHT", 10, 0)
+        optFrame:SetSize(450, 28); optFrame:SetPoint("LEFT", txt, "RIGHT", 10, 0)
 
         local function CreateQuickCB(key, label, x)
             local c = CreateFrame("CheckButton", nil, optFrame, "InterfaceOptionsCheckButtonTemplate")
-            c:SetSize(18, 18); c:SetPoint("LEFT", x, 0)
+            c:SetSize(20, 20); c:SetPoint("LEFT", x, 0)
             c.Text:SetFontObject("GameFontNormalSmall"); c.Text:SetText(label)
             c:SetScript("OnClick", function(self) Kaneri_Tool_Settings.Bars[data.id].customConfig[key] = self:GetChecked() end)
             return c
         end
 
-        local qComb = CreateQuickCB("combat", "C", 0)
-        local qTarg = CreateQuickCB("exists", "T", 35)
-        local qFly  = CreateQuickCB("flying", "V", 70)
+        local qComb = CreateQuickCB("combat", "Combate", 0)
+        local qTarg = CreateQuickCB("exists", "Objetivo", 90)
+        local qHarm = CreateQuickCB("harm", "Hostil", 180)
+        local qStea = CreateQuickCB("stealth", "Sigilo", 260)
+        local qFly  = CreateQuickCB("flying", "Vuelo", 340)
         
         local function Refresh()
             local isC = Kaneri_Tool_Settings.Bars[data.id].isCustom
-            mBtn:SetText(isC and "C" or "G")
-            mBtn:GetFontString():SetTextColor(isC and 1 or 0, isC and 0.6 or 1, isC and 0 or 1)
+            mBtn:SetText(isC and "CUSTOM" or "GLOBAL")
+            local r, g, b = isC and 1 or 0.2, isC and 0.6 or 0.6, isC and 0.2 or 1
+            mBtn:GetFontString():SetTextColor(r, g, b)
             if isC then 
                 optFrame:Show()
-                qComb:SetChecked(Kaneri_Tool_Settings.Bars[data.id].customConfig.combat)
-                qTarg:SetChecked(Kaneri_Tool_Settings.Bars[data.id].customConfig.exists)
-                qFly:SetChecked(Kaneri_Tool_Settings.Bars[data.id].customConfig.flying)
+                local cfg = Kaneri_Tool_Settings.Bars[data.id].customConfig
+                qComb:SetChecked(cfg.combat); qTarg:SetChecked(cfg.exists)
+                qHarm:SetChecked(cfg.harm); qStea:SetChecked(cfg.stealth); qFly:SetChecked(cfg.flying)
             else optFrame:Hide() end
         end
 
@@ -186,15 +189,15 @@ local function SetupUI()
         Refresh()
     end
 
-    -- 2. ZONAS (Global)
+    -- 2. ZONAS (Global) - Ajustado al nuevo ancho
     local s2 = panel:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-    s2:SetPoint("TOPLEFT", 30, -325); s2:SetText("2. Comportamiento por Zona (Global)")
+    s2:SetPoint("TOP", 0, -340); s2:SetText("2. Comportamiento por Zona (Global)")
     local zDefs = {{l="Exteriores", c="z_world"}, {l="Ciudades", c="z_city"}, {l="Profundidades", c="z_delve"}, {l="Mazmorras", c="z_party"}, {l="Bandas", c="z_raid"}}
     for i, z in ipairs(zDefs) do
         local l = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-        l:SetPoint("TOPLEFT", 40, -340 - (i * 30)); l:SetText(z.l)
+        l:SetPoint("TOPLEFT", 250, -355 - (i * 30)); l:SetText(z.l)
         local b = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
-        b:SetSize(100, 22); b:SetPoint("LEFT", l, "RIGHT", 130, 0)
+        b:SetSize(120, 22); b:SetPoint("LEFT", l, "RIGHT", 150, 0)
         UpdateZoneBtn(b, Kaneri_Tool_Settings.GlobalConfig[z.c])
         b:SetScript("OnClick", function(self)
             local cur = Kaneri_Tool_Settings.GlobalConfig[z.c]
@@ -205,24 +208,24 @@ local function SetupUI()
 
     -- 3. CONDICIONES (Global)
     local s3 = panel:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-    s3:SetPoint("TOPLEFT", 30, -520); s3:SetText("3. Condiciones 'AUTO' (Global)")
+    s3:SetPoint("TOP", 0, -530); s3:SetText("3. Condiciones 'AUTO' (Global)")
     local cDefs = {{l="En Combate", c="combat"}, {l="Objetivo Hostil", c="harm"}, {l="Tener Objetivo", c="exists"}, {l="En Sigilo", c="stealth"}, {l="|cff00ccffVolando|r", c="flying"}}
     for i, cond in ipairs(cDefs) do
         local cb = CreateFrame("CheckButton", nil, panel, "InterfaceOptionsCheckButtonTemplate")
         local col, row = (i % 2 == 0) and 1 or 0, math.floor((i-1)/2)
-        cb:SetPoint("TOPLEFT", 35 + (col * 190), -545 - (row * 24))
+        cb:SetPoint("TOPLEFT", 220 + (col * 220), -555 - (row * 24))
         cb.Text:SetText(cond.l); cb:SetChecked(Kaneri_Tool_Settings.GlobalConfig[cond.c])
         cb:SetScript("OnClick", function(self) Kaneri_Tool_Settings.GlobalConfig[cond.c] = self:GetChecked() end)
     end
 
     local slider = CreateFrame("Slider", "KaneriDelaySlider", panel, "OptionsSliderTemplate")
-    slider:SetPoint("TOPLEFT", 40, -670); slider:SetWidth(380)
+    slider:SetPoint("BOTTOM", 0, 40); slider:SetWidth(600)
     slider:SetMinMaxValues(0, 30); slider:SetValueStep(1); slider:SetObeyStepOnDrag(true)
     slider:SetValue(Kaneri_Tool_Settings.GlobalConfig.delay or 2)
-    _G[slider:GetName()..'Text']:SetText("Retraso Global: "..slider:GetValue().."s")
+    _G[slider:GetName()..'Text']:SetText("Retraso Global antes de ocultar: "..slider:GetValue().."s")
     slider:SetScript("OnValueChanged", function(self, v)
         local val = math.floor(v)
-        _G[self:GetName()..'Text']:SetText("Retraso Global: "..val.."s")
+        _G[self:GetName()..'Text']:SetText("Retraso Global antes de ocultar: "..val.."s")
         Kaneri_Tool_Settings.GlobalConfig.delay = val
     end)
 
