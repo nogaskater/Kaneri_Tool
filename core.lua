@@ -95,8 +95,9 @@ panel:SetBackdrop({bgFile = "Interface\\ChatFrame\\ChatFrameBackground", edgeFil
 panel:SetBackdropColor(0, 0, 0, 0.9); panel:SetMovable(true); panel:EnableMouse(true); panel:RegisterForDrag("LeftButton")
 panel:SetScript("OnDragStart", panel.StartMoving); panel:SetScript("OnDragStop", panel.StopMovingOrSizing)
 
+-- PANEL DE CONFIGURACIÓN (A LA DERECHA, ALINEADO ARRIBA)
 local configPanel = CreateFrame("Frame", "KaneriToolConfigPanel", panel, "BackdropTemplate")
-configPanel:SetSize(800, 710); configPanel:SetPoint("LEFT", panel, "RIGHT", 10, 0); configPanel:Hide()
+configPanel:SetSize(800, 710); configPanel:SetPoint("TOPLEFT", panel, "TOPRIGHT", 10, 0); configPanel:Hide()
 configPanel:SetBackdrop({bgFile = "Interface\\ChatFrame\\ChatFrameBackground", edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border", tile = true, tileSize = 32, edgeSize = 32, insets = { 8, 8, 8, 8 }})
 configPanel:SetBackdropColor(0, 0, 0, 0.95)
 
@@ -111,7 +112,7 @@ local function SetupUI()
     local title = panel:CreateFontString(nil, "ARTWORK", "GameFontNormal")
     title:SetPoint("TOP", 0, -12); title:SetText("Kaneri Tool")
 
-    -- 1. Checkbox Visibilidad + Botón de Config
+    -- 1. Visibilidad
     local visCB = CreateFrame("CheckButton", nil, panel, "InterfaceOptionsCheckButtonTemplate")
     visCB:SetPoint("TOPLEFT", 15, -40); visCB:SetSize(24, 24)
     visCB:SetChecked(Kaneri_Tool_Settings.GlobalConfig.visibilidadActiva)
