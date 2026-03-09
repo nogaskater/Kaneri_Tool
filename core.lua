@@ -1,25 +1,22 @@
--- 1. Registro del Comando con soporte para Toggle
+-- 1. Registro del Comando con Toggle y Auto-Centrado de seguridad
 SLASH_KT1 = "/kt"
 SlashCmdList["KT"] = function(msg)
     if msg == "toggle" then
         if Kaneri_Tool_Settings and Kaneri_Tool_Settings.GlobalConfig then
             local cfg = Kaneri_Tool_Settings.GlobalConfig
             cfg.visibilidadActiva = not cfg.visibilidadActiva
-            
-            -- Actualizar el CheckButton visualmente si el panel existe
-            if KaneriVisCB then 
-                KaneriVisCB:SetChecked(cfg.visibilidadActiva) 
-            end
-            
+            if KaneriVisCB then KaneriVisCB:SetChecked(cfg.visibilidadActiva) end
             local estado = cfg.visibilidadActiva and "|cff00ff00ACTIVADA|r" or "|cffff0000DESACTIVADA|r"
-            print("|cffffcc00Kaneri Tool:|r Visibilidad de barras " .. estado)
+            print("|cffffcc00Kaneri Tool:|r Visibilidad " .. estado)
         end
     else
-        -- Comportamiento normal de abrir/cerrar menús
-        if KaneriToolOptionsPanel and KaneriToolOptionsPanel:IsShown() then 
+        if KaneriToolOptionsPanel:IsShown() then 
             KaneriToolOptionsPanel:Hide() 
             if KaneriToolConfigPanel then KaneriToolConfigPanel:Hide() end
-        elseif KaneriToolOptionsPanel then 
+        else 
+            -- SEGURIDAD: Si la ventana estaba fuera, esto la devuelve al centro
+            KaneriToolOptionsPanel:ClearAllPoints()
+            KaneriToolOptionsPanel:SetPoint("CENTER", UIParent, "CENTER")
             KaneriToolOptionsPanel:Show() 
         end
     end
@@ -127,6 +124,10 @@ local function SetupUI()
     panel:SetSize(240, 160); panel:SetPoint("CENTER"); panel:Hide()
     panel:SetBackdrop({bgFile = "Interface\\ChatFrame\\ChatFrameBackground", edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border", tile = true, tileSize = 16, edgeSize = 16, insets = { 4, 4, 4, 4 }})
     panel:SetBackdropColor(0, 0, 0, 0.9); panel:SetMovable(true); panel:EnableMouse(true); panel:RegisterForDrag("LeftButton")
+    
+    -- ESTO EVITA QUE SE SALGA DE LA PANTALLA
+    panel:SetClampedToScreen(true)
+    
     panel:SetScript("OnDragStart", panel.StartMoving); panel:SetScript("OnDragStop", panel.StopMovingOrSizing)
 
     local configPanel = CreateFrame("Frame", "KaneriToolConfigPanel", panel, "BackdropTemplate")
@@ -134,6 +135,7 @@ local function SetupUI()
     configPanel:SetBackdrop({bgFile = "Interface\\ChatFrame\\ChatFrameBackground", edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border", tile = true, tileSize = 32, edgeSize = 32, insets = { 8, 8, 8, 8 }})
     configPanel:SetBackdropColor(0, 0, 0, 0.95)
     configPanel:SetResizable(true)
+    configPanel:SetClampedToScreen(true) -- También para la ventana grande
     if configPanel.SetResizeBounds then configPanel:SetResizeBounds(800, 500, 800, 1000) end
 
     local rb = CreateFrame("Button", nil, configPanel)
@@ -146,7 +148,6 @@ local function SetupUI()
     local title = panel:CreateFontString(nil, "ARTWORK", "GameFontNormal")
     title:SetPoint("TOP", 0, -12); title:SetText("Kaneri Tool")
     
-    -- Le damos nombre global "KaneriVisCB" para que el toggle pueda actualizarlo
     local visCB = CreateFrame("CheckButton", "KaneriVisCB", panel, "InterfaceOptionsCheckButtonTemplate")
     visCB:SetPoint("TOPLEFT", 15, -40); visCB:SetSize(24, 24)
     visCB:SetChecked(Kaneri_Tool_Settings.GlobalConfig.visibilidadActiva)
@@ -173,8 +174,6 @@ local function SetupUI()
     cfgTitle:SetPoint("TOP", 0, -20); cfgTitle:SetText("Configuración de Visibilidad")
 
     -- ZONAS
-    local sZonas = configPanel:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-    sZonas:SetPoint("TOPLEFT", 40, -60); sZonas:SetText("Reglas por Zona (Prioridad Alta)")
     local zDefs = {{l="Exteriores", c="z_world"}, {l="Ciudades", c="z_city"}, {l="Profundidades", c="z_delve"}, {l="Mazmorras", c="z_party"}, {l="Bandas", c="z_raid"}}
     for i, z in ipairs(zDefs) do
         local l = configPanel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
@@ -190,8 +189,6 @@ local function SetupUI()
     end
 
     -- CONDICIONES GLOBALES
-    local sConds = configPanel:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-    sConds:SetPoint("TOPLEFT", 420, -60); sConds:SetText("Condiciones 'AUTO' (Globales)")
     local cDefs = {{l="En Combate", c="combat"}, {l="Objetivo Hostil", c="harm"}, {l="Tener Objetivo", c="exists"}, {l="En Sigilo", c="stealth"}, {l="|cff00ccffVolando|r", c="flying"}}
     for i, cond in ipairs(cDefs) do
         local cb = CreateFrame("CheckButton", nil, configPanel, "InterfaceOptionsCheckButtonTemplate")
@@ -224,14 +221,11 @@ local function SetupUI()
     CreateGlobalSlider("KaneriGlobalDelay", "Retraso", -160, 0, 30, "delay")
     CreateGlobalSlider("KaneriGlobalAlpha", "Opacidad Máxima", 160, 0.1, 1, "alpha")
 
-    -- LISTA DE BARRAS
-    local sep = configPanel:CreateTexture(nil, "ARTWORK")
-    sep:SetSize(720, 1); sep:SetColorTexture(1, 1, 1, 0.1); sep:SetPoint("TOP", sliderBox, "BOTTOM", 0, 0)
-
+    -- SCROLL Y LISTA DE BARRAS
     local scrollFrame = CreateFrame("ScrollFrame", "KaneriConfigScroll", configPanel, "UIPanelScrollFrameTemplate")
     scrollFrame:SetPoint("TOPLEFT", 25, -305); scrollFrame:SetPoint("BOTTOMRIGHT", -35, 35)
     local scrollChild = CreateFrame("Frame")
-    scrollChild:SetSize(720, 420)
+    scrollChild:SetSize(720, #barList * 35)
     scrollFrame:SetScrollChild(scrollChild)
 
     for i, data in ipairs(barList) do
@@ -308,13 +302,11 @@ ldr:SetScript("OnEvent", function(self, event, addon)
     if addon ~= "Kaneri_Tool" then return end
     local d = { visibilidadActiva=true, autoRepair=true, autoSell=true, combat=true, harm=true, exists=true, stealth=false, flying=true, z_party=0, z_raid=0, z_city=0, z_delve=0, z_world=0, delay=2, alpha=1 }
     if not Kaneri_Tool_Settings then Kaneri_Tool_Settings = { GlobalConfig = d, Bars = {} } end
-    if Kaneri_Tool_Settings.GlobalConfig.alpha == nil then Kaneri_Tool_Settings.GlobalConfig.alpha = 1 end
     for _, data in ipairs(barList) do
         if not Kaneri_Tool_Settings.Bars[data.id] then
             Kaneri_Tool_Settings.Bars[data.id] = { enabled = false, isCustom = false, customConfig = CopyTable(d) }
-        elseif Kaneri_Tool_Settings.Bars[data.id].customConfig.alpha == nil then
-            Kaneri_Tool_Settings.Bars[data.id].customConfig.alpha = 1
         end
     end
     SetupUI()
+    self:UnregisterAllEvents()
 end)
