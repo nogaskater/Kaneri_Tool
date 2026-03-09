@@ -64,7 +64,7 @@ local function GetTargetState(cfg)
     return any and "show" or "hide"
 end
 
--- 4. Aplicación de Alpha
+-- 4. Aplicación de Alpha (OnUpdate)
 local engine = CreateFrame("Frame")
 engine:SetScript("OnUpdate", function(self, elapsed)
     if not Kaneri_Tool_Settings or not Kaneri_Tool_Settings.Bars then return end
@@ -115,9 +115,10 @@ end)
 
 -- 6. INTERFAZ DE USUARIO
 local function UpdateZoneBtn(btn, val)
-    if val == 1 then btn:SetText("VISIBLE"); btn.Text:SetTextColor(0, 1, 0)
-    elseif val == -1 then btn:SetText("OCULTO"); btn.Text:SetTextColor(1, 0, 0)
-    else btn:SetText("AUTO"); btn.Text:SetTextColor(0.6, 0.6, 1) end
+    if not btn.Text then return end
+    if val == 1 then btn.Text:SetText("VISIBLE"); btn.Text:SetTextColor(0, 1, 0)
+    elseif val == -1 then btn.Text:SetText("OCULTO"); btn.Text:SetTextColor(1, 0, 0)
+    else btn.Text:SetText("AUTO"); btn.Text:SetTextColor(0.6, 0.6, 1) end
 end
 
 function SetupUI()
@@ -133,9 +134,7 @@ function SetupUI()
     local configPanel = CreateFrame("Frame", "KaneriToolConfigPanel", panel, "BackdropTemplate")
     configPanel:SetSize(800, 720); configPanel:SetPoint("TOPLEFT", panel, "TOPRIGHT", 10, 0); configPanel:Hide()
     configPanel:SetBackdrop({bgFile = "Interface\\ChatFrame\\ChatFrameBackground", edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border", tile = true, tileSize = 32, edgeSize = 32, insets = { 8, 8, 8, 8 }})
-    configPanel:SetBackdropColor(0, 0, 0, 0.95)
-    configPanel:SetResizable(true)
-    configPanel:SetClampedToScreen(true)
+    configPanel:SetBackdropColor(0, 0, 0, 0.95); configPanel:SetResizable(true); configPanel:SetClampedToScreen(true)
     if configPanel.SetResizeBounds then configPanel:SetResizeBounds(800, 500, 800, 1000) end
 
     local rb = CreateFrame("Button", nil, configPanel)
@@ -145,6 +144,7 @@ function SetupUI()
     rb:SetScript("OnMouseDown", function() configPanel:StartSizing("BOTTOMRIGHT") end)
     rb:SetScript("OnMouseUp", function() configPanel:StopMovingOrSizing() end)
 
+    -- CORRECCIÓN TÍTULO (Línea del error anterior arreglada)
     local title = panel:CreateFontString(nil, "ARTWORK", "GameFontNormal")
     title:SetPoint("TOP", 0, -12); title:SetText("Kaneri Tool")
     
@@ -173,13 +173,14 @@ function SetupUI()
     local cfgTitle = configPanel:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
     cfgTitle:SetPoint("TOP", 0, -20); cfgTitle:SetText("Configuración de Visibilidad")
 
-    -- ZONAS
+    -- ZONAS RECUPERADAS
     local zDefs = {{l="Exteriores", c="z_world"}, {l="Ciudades", c="z_city"}, {l="Profundidades", c="z_delve"}, {l="Mazmorras", c="z_party"}, {l="Bandas", c="z_raid"}}
     for i, z in ipairs(zDefs) do
         local l = configPanel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
         l:SetPoint("TOPLEFT", 50, -65 - (i * 26)); l:SetText(z.l)
         local b = CreateFrame("Button", nil, configPanel, "UIPanelButtonTemplate")
         b:SetSize(100, 18); b:SetPoint("LEFT", l, "RIGHT", 60, 0)
+        b.Text = b:GetFontString() -- Asegurar referencia al texto
         UpdateZoneBtn(b, Kaneri_Tool_Settings.GlobalConfig[z.c])
         b:SetScript("OnClick", function(self)
             local cur = Kaneri_Tool_Settings.GlobalConfig[z.c]
@@ -188,7 +189,7 @@ function SetupUI()
         end)
     end
 
-    -- CONDICIONES GLOBALES
+    -- CONDICIONES GLOBALES RECUPERADAS
     local cDefs = {{l="En Combate", c="combat"}, {l="Objetivo Hostil", c="harm"}, {l="Tener Objetivo", c="exists"}, {l="En Sigilo", c="stealth"}, {l="|cff00ccffVolando|r", c="flying"}}
     for i, cond in ipairs(cDefs) do
         local cb = CreateFrame("CheckButton", nil, configPanel, "InterfaceOptionsCheckButtonTemplate")
@@ -197,7 +198,7 @@ function SetupUI()
         cb:SetScript("OnClick", function(self) Kaneri_Tool_Settings.GlobalConfig[cond.c] = self:GetChecked() end)
     end
 
-    -- SLIDERS GLOBALES
+    -- SLIDERS GLOBALES RECUPERADOS
     local sliderBox = CreateFrame("Frame", nil, configPanel)
     sliderBox:SetPoint("TOP", 0, -215); sliderBox:SetSize(720, 60)
     
@@ -217,11 +218,10 @@ function SetupUI()
             UpdateText(v)
         end)
     end
-
     CreateGlobalSlider("KaneriGlobalDelay", "Retraso", -160, 0, 30, "delay")
     CreateGlobalSlider("KaneriGlobalAlpha", "Opacidad Máxima", 160, 0.1, 1, "alpha")
 
-    -- SCROLL Y LISTA DE BARRAS (DINÁMICA)
+    -- LISTA DINÁMICA DE BARRAS RECUPERADA
     local scrollFrame = CreateFrame("ScrollFrame", "KaneriConfigScroll", configPanel, "UIPanelScrollFrameTemplate")
     scrollFrame:SetPoint("TOPLEFT", 25, -305); scrollFrame:SetPoint("BOTTOMRIGHT", -35, 35)
     local scrollChild = CreateFrame("Frame")
@@ -229,12 +229,9 @@ function SetupUI()
     scrollFrame:SetScrollChild(scrollChild)
 
     for i, data in ipairs(barList) do
-        -- ASEGURAR DATOS DE BARRA ANTES DE CREAR LA FILA
         if not Kaneri_Tool_Settings.Bars[data.id] then
-            local d = Kaneri_Tool_Settings.GlobalConfig
-            Kaneri_Tool_Settings.Bars[data.id] = { enabled = false, isCustom = false, customConfig = CopyTable(d) }
+            Kaneri_Tool_Settings.Bars[data.id] = { enabled = false, isCustom = false, customConfig = CopyTable(Kaneri_Tool_Settings.GlobalConfig) }
         end
-
         local y = -((i-1) * 35)
         local row = CreateFrame("Frame", nil, scrollChild)
         row:SetSize(720, 32); row:SetPoint("TOPLEFT", 0, y)
@@ -281,7 +278,8 @@ function SetupUI()
             local isC = Kaneri_Tool_Settings.Bars[data.id].isCustom
             mBtn:SetText(isC and "CUSTOM" or "GLOBAL")
             local r, g, b = isC and 1 or 0.2, isC and 0.6 or 0.6, isC and 0.2 or 1
-            mBtn:GetFontString():SetTextColor(r, g, b)
+            local fs = mBtn:GetFontString()
+            if fs then fs:SetTextColor(r, g, b) end
             if isC then 
                 optFrame:Show()
                 local cfg = Kaneri_Tool_Settings.Bars[data.id].customConfig
@@ -306,18 +304,12 @@ local ldr = CreateFrame("Frame")
 ldr:RegisterEvent("PLAYER_LOGIN")
 ldr:SetScript("OnEvent", function(self)
     local d = { visibilidadActiva=true, autoRepair=true, autoSell=true, combat=true, harm=true, exists=true, stealth=false, flying=true, z_party=0, z_raid=0, z_city=0, z_delve=0, z_world=0, delay=2, alpha=1 }
-    
-    if not Kaneri_Tool_Settings then 
-        Kaneri_Tool_Settings = { GlobalConfig = d, Bars = {} } 
-    end
-    
-    -- Inicializar barras si la tabla está vacía
+    if not Kaneri_Tool_Settings then Kaneri_Tool_Settings = { GlobalConfig = d, Bars = {} } end
     for _, data in ipairs(barList) do
         if not Kaneri_Tool_Settings.Bars[data.id] then
             Kaneri_Tool_Settings.Bars[data.id] = { enabled = false, isCustom = false, customConfig = CopyTable(d) }
         end
     end
-    
     SetupUI()
     self:UnregisterAllEvents()
 end)
