@@ -1,11 +1,27 @@
--- 1. Registro del Comando
+-- 1. Registro del Comando con soporte para Toggle
 SLASH_KT1 = "/kt"
 SlashCmdList["KT"] = function(msg)
-    if KaneriToolOptionsPanel:IsShown() then 
-        KaneriToolOptionsPanel:Hide() 
-        if KaneriToolConfigPanel then KaneriToolConfigPanel:Hide() end
-    else 
-        KaneriToolOptionsPanel:Show() 
+    if msg == "toggle" then
+        if Kaneri_Tool_Settings and Kaneri_Tool_Settings.GlobalConfig then
+            local cfg = Kaneri_Tool_Settings.GlobalConfig
+            cfg.visibilidadActiva = not cfg.visibilidadActiva
+            
+            -- Actualizar el CheckButton visualmente si el panel existe
+            if KaneriVisCB then 
+                KaneriVisCB:SetChecked(cfg.visibilidadActiva) 
+            end
+            
+            local estado = cfg.visibilidadActiva and "|cff00ff00ACTIVADA|r" or "|cffff0000DESACTIVADA|r"
+            print("|cffffcc00Kaneri Tool:|r Visibilidad de barras " .. estado)
+        end
+    else
+        -- Comportamiento normal de abrir/cerrar menús
+        if KaneriToolOptionsPanel and KaneriToolOptionsPanel:IsShown() then 
+            KaneriToolOptionsPanel:Hide() 
+            if KaneriToolConfigPanel then KaneriToolConfigPanel:Hide() end
+        elseif KaneriToolOptionsPanel then 
+            KaneriToolOptionsPanel:Show() 
+        end
     end
 end
 
@@ -26,12 +42,10 @@ local barList = {
     { id = "DamageMeterSessionWindow2", label = "Recount 2" }
 }
 
--- 3. Motor HUD (Lógica de Prioridad Corregida)
+-- 3. Motor HUD
 local barStates = {} 
 local function GetTargetState(cfg)
-    if not Kaneri_Tool_Settings.GlobalConfig.visibilidadActiva then return "show" end
-    
-    -- PRIORIDAD 1: Reglas de Zona (Siempre Globales)
+    if not Kaneri_Tool_Settings or not Kaneri_Tool_Settings.GlobalConfig.visibilidadActiva then return "show" end
     local g = Kaneri_Tool_Settings.GlobalConfig
     local z = 0
     if IsResting() and g.z_city ~= 0 then z = g.z_city
@@ -43,7 +57,6 @@ local function GetTargetState(cfg)
     if z == 1 then return "show" end
     if z == -1 then return "hide" end
     
-    -- PRIORIDAD 2: Condiciones (Si la zona es AUTO)
     local any = (cfg.combat and InCombatLockdown()) or 
                 (cfg.exists and UnitExists("target")) or 
                 (cfg.stealth and IsStealthed()) or 
@@ -65,7 +78,6 @@ engine:SetScript("OnUpdate", function(self, elapsed)
             if b and b.enabled then
                 local cfg = b.isCustom and b.customConfig or Kaneri_Tool_Settings.GlobalConfig
                 local target = GetTargetState(cfg)
-                
                 if not barStates[data.id] then barStates[data.id] = { last = "hide", timer = 0 } end
                 local s = barStates[data.id]
                 
@@ -94,6 +106,7 @@ end)
 local sellFrame = CreateFrame("Frame")
 sellFrame:RegisterEvent("MERCHANT_SHOW")
 sellFrame:SetScript("OnEvent", function()
+    if not Kaneri_Tool_Settings then return end
     local cfg = Kaneri_Tool_Settings.GlobalConfig
     if cfg.autoSell and C_MerchantFrame.GetNumJunkItems() > 0 then C_MerchantFrame.SellAllJunkItems() end
     if cfg.autoRepair and CanMerchantRepair() then
@@ -103,26 +116,6 @@ sellFrame:SetScript("OnEvent", function()
 end)
 
 -- 6. INTERFAZ DE USUARIO
-local panel = CreateFrame("Frame", "KaneriToolOptionsPanel", UIParent, "BackdropTemplate")
-panel:SetSize(240, 160); panel:SetPoint("CENTER"); panel:Hide()
-panel:SetBackdrop({bgFile = "Interface\\ChatFrame\\ChatFrameBackground", edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border", tile = true, tileSize = 16, edgeSize = 16, insets = { 4, 4, 4, 4 }})
-panel:SetBackdropColor(0, 0, 0, 0.9); panel:SetMovable(true); panel:EnableMouse(true); panel:RegisterForDrag("LeftButton")
-panel:SetScript("OnDragStart", panel.StartMoving); panel:SetScript("OnDragStop", panel.StopMovingOrSizing)
-
-local configPanel = CreateFrame("Frame", "KaneriToolConfigPanel", panel, "BackdropTemplate")
-configPanel:SetSize(800, 720); configPanel:SetPoint("TOPLEFT", panel, "TOPRIGHT", 10, 0); configPanel:Hide()
-configPanel:SetBackdrop({bgFile = "Interface\\ChatFrame\\ChatFrameBackground", edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border", tile = true, tileSize = 32, edgeSize = 32, insets = { 8, 8, 8, 8 }})
-configPanel:SetBackdropColor(0, 0, 0, 0.95)
-configPanel:SetResizable(true)
-if configPanel.SetResizeBounds then configPanel:SetResizeBounds(800, 500, 800, 1000) end
-
-local rb = CreateFrame("Button", nil, configPanel)
-rb:SetPoint("BOTTOMRIGHT", -8, 8); rb:SetSize(16, 16)
-rb:SetNormalTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Up")
-rb:SetHighlightTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Highlight")
-rb:SetScript("OnMouseDown", function() configPanel:StartSizing("BOTTOMRIGHT") end)
-rb:SetScript("OnMouseUp", function() configPanel:StopMovingOrSizing() end)
-
 local function UpdateZoneBtn(btn, val)
     if val == 1 then btn:SetText("VISIBLE"); btn.Text:SetTextColor(0, 1, 0)
     elseif val == -1 then btn:SetText("OCULTO"); btn.Text:SetTextColor(1, 0, 0)
@@ -130,10 +123,31 @@ local function UpdateZoneBtn(btn, val)
 end
 
 local function SetupUI()
+    local panel = CreateFrame("Frame", "KaneriToolOptionsPanel", UIParent, "BackdropTemplate")
+    panel:SetSize(240, 160); panel:SetPoint("CENTER"); panel:Hide()
+    panel:SetBackdrop({bgFile = "Interface\\ChatFrame\\ChatFrameBackground", edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border", tile = true, tileSize = 16, edgeSize = 16, insets = { 4, 4, 4, 4 }})
+    panel:SetBackdropColor(0, 0, 0, 0.9); panel:SetMovable(true); panel:EnableMouse(true); panel:RegisterForDrag("LeftButton")
+    panel:SetScript("OnDragStart", panel.StartMoving); panel:SetScript("OnDragStop", panel.StopMovingOrSizing)
+
+    local configPanel = CreateFrame("Frame", "KaneriToolConfigPanel", panel, "BackdropTemplate")
+    configPanel:SetSize(800, 720); configPanel:SetPoint("TOPLEFT", panel, "TOPRIGHT", 10, 0); configPanel:Hide()
+    configPanel:SetBackdrop({bgFile = "Interface\\ChatFrame\\ChatFrameBackground", edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border", tile = true, tileSize = 32, edgeSize = 32, insets = { 8, 8, 8, 8 }})
+    configPanel:SetBackdropColor(0, 0, 0, 0.95)
+    configPanel:SetResizable(true)
+    if configPanel.SetResizeBounds then configPanel:SetResizeBounds(800, 500, 800, 1000) end
+
+    local rb = CreateFrame("Button", nil, configPanel)
+    rb:SetPoint("BOTTOMRIGHT", -8, 8); rb:SetSize(16, 16)
+    rb:SetNormalTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Up")
+    rb:SetHighlightTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Highlight")
+    rb:SetScript("OnMouseDown", function() configPanel:StartSizing("BOTTOMRIGHT") end)
+    rb:SetScript("OnMouseUp", function() configPanel:StopMovingOrSizing() end)
+
     local title = panel:CreateFontString(nil, "ARTWORK", "GameFontNormal")
     title:SetPoint("TOP", 0, -12); title:SetText("Kaneri Tool")
     
-    local visCB = CreateFrame("CheckButton", nil, panel, "InterfaceOptionsCheckButtonTemplate")
+    -- Le damos nombre global "KaneriVisCB" para que el toggle pueda actualizarlo
+    local visCB = CreateFrame("CheckButton", "KaneriVisCB", panel, "InterfaceOptionsCheckButtonTemplate")
     visCB:SetPoint("TOPLEFT", 15, -40); visCB:SetSize(24, 24)
     visCB:SetChecked(Kaneri_Tool_Settings.GlobalConfig.visibilidadActiva)
     visCB:SetScript("OnClick", function(self) Kaneri_Tool_Settings.GlobalConfig.visibilidadActiva = self:GetChecked() end)
@@ -158,7 +172,7 @@ local function SetupUI()
     local cfgTitle = configPanel:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
     cfgTitle:SetPoint("TOP", 0, -20); cfgTitle:SetText("Configuración de Visibilidad")
 
-    -- ZONAS (Siempre Globales)
+    -- ZONAS
     local sZonas = configPanel:CreateFontString(nil, "ARTWORK", "GameFontNormal")
     sZonas:SetPoint("TOPLEFT", 40, -60); sZonas:SetText("Reglas por Zona (Prioridad Alta)")
     local zDefs = {{l="Exteriores", c="z_world"}, {l="Ciudades", c="z_city"}, {l="Profundidades", c="z_delve"}, {l="Mazmorras", c="z_party"}, {l="Bandas", c="z_raid"}}
@@ -284,7 +298,6 @@ local function SetupUI()
         end)
         Refresh()
     end
-
     CreateFrame("Button", nil, configPanel, "UIPanelCloseButton"):SetPoint("TOPRIGHT", -5, -5)
 end
 
