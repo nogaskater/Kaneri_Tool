@@ -1,8 +1,8 @@
 -- =================================================================
--- KANERI TOOL - Archivo core.lua Completo
+-- KANERI TOOL - Archivo core.lua Completo (Versión Optimizada)
 -- =================================================================
 
--- 1. Lista de Marcos (Definida al principio para que sea accesible)
+-- 1. Lista de Marcos
 local barList = {
     { id = "PlayerFrame", label = "Retrato Jugador" },
     { id = "PetFrame", label = "Retrato Pet" },
@@ -37,7 +37,6 @@ SlashCmdList["KT"] = function(msg)
         print("|cff00ff00Kaneri Tool:|r Configuración reiniciada. Recargando...")
         ReloadUI()
     else
-        -- Comportamiento por defecto: Abrir/Cerrar Panel
         if KaneriToolOptionsPanel:IsShown() then 
             KaneriToolOptionsPanel:Hide() 
             if KaneriToolConfigPanel then KaneriToolConfigPanel:Hide() end
@@ -49,21 +48,38 @@ SlashCmdList["KT"] = function(msg)
     end
 end
 
--- 3. Motor de Visibilidad (Lógica HUD)
+-- 3. Motor de Visibilidad (Lógica HUD mejorada)
 local barStates = {} 
 local function GetTargetState(cfg)
     if not Kaneri_Tool_Settings or not Kaneri_Tool_Settings.GlobalConfig.visibilidadActiva then return "show" end
+    
     local g = Kaneri_Tool_Settings.GlobalConfig
     local z = 0
-    if IsResting() and g.z_city ~= 0 then z = g.z_city
-    elseif (IsInRaid() and IsIndoors()) and g.z_raid ~= 0 then z = g.z_raid
-    elseif (IsInGroup() and IsIndoors()) and g.z_party ~= 0 then z = g.z_party
-    elseif IsIndoors() and not IsInGroup() and g.z_delve ~= 0 then z = g.z_delve
-    elseif g.z_world ~= 0 then z = g.z_world end
     
+    -- Obtener tipo de instancia real
+    local _, instanceType = GetInstanceInfo()
+    
+    -- PRIORIDAD DE ZONAS
+    if instanceType == "raid" then
+        z = g.z_raid
+    elseif instanceType == "party" then
+        z = g.z_party
+    elseif instanceType == "scenario" then
+        -- Las Profundidades (Delves) se identifican como 'scenario'
+        z = g.z_delve
+    elseif IsResting() then
+        -- Ciudades y Tabernas (Zonas de descanso)
+        z = g.z_city
+    else
+        -- Mundo abierto y casas/interiores que no son mazmorras
+        z = g.z_world
+    end
+    
+    -- Si la zona tiene un estado forzado (Visible u Oculto)
     if z == 1 then return "show" end
     if z == -1 then return "hide" end
     
+    -- Si está en AUTO (0), evaluamos condiciones
     local any = (cfg.combat and InCombatLockdown()) or 
                 (cfg.exists and UnitExists("target")) or 
                 (cfg.stealth and IsStealthed()) or 
@@ -112,7 +128,7 @@ engine:SetScript("OnUpdate", function(self, elapsed)
     end
 end)
 
--- 5. Lógica de Mercader (Venta y Reparación)
+-- 5. Lógica de Mercader
 local sellFrame = CreateFrame("Frame")
 sellFrame:RegisterEvent("MERCHANT_SHOW")
 sellFrame:SetScript("OnEvent", function()
@@ -140,8 +156,6 @@ end
 
 function SetupUI()
     if KaneriToolOptionsPanel then return end
-
-    -- Asegurar tabla inicial si por algo falla la carga
     if not Kaneri_Tool_Settings then return end
 
     local panel = CreateFrame("Frame", "KaneriToolOptionsPanel", UIParent, "BackdropTemplate")
@@ -193,12 +207,12 @@ function SetupUI()
     cfgTitle:SetPoint("TOP", 0, -20); cfgTitle:SetText("Configuración de Visibilidad")
 
     -- ZONAS
-    local zDefs = {{l="Exteriores", c="z_world"}, {l="Ciudades", c="z_city"}, {l="Profundidades", c="z_delve"}, {l="Mazmorras", c="z_party"}, {l="Bandas", c="z_raid"}}
+    local zDefs = {{l="Exteriores", c="z_world"}, {l="Ciudades/Tabernas", c="z_city"}, {l="Profundidades", c="z_delve"}, {l="Mazmorras", c="z_party"}, {l="Bandas", c="z_raid"}}
     for i, z in ipairs(zDefs) do
         local l = configPanel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
         l:SetPoint("TOPLEFT", 50, -65 - (i * 26)); l:SetText(z.l)
         local b = CreateFrame("Button", nil, configPanel, "UIPanelButtonTemplate")
-        b:SetSize(100, 18); b:SetPoint("LEFT", l, "RIGHT", 60, 0)
+        b:SetSize(120, 18); b:SetPoint("LEFT", l, "RIGHT", 60, 0)
         b.Text = b:GetFontString()
         UpdateZoneBtn(b, Kaneri_Tool_Settings.GlobalConfig[z.c])
         b:SetScript("OnClick", function(self)
@@ -321,7 +335,6 @@ end
 local ldr = CreateFrame("Frame")
 ldr:RegisterEvent("ADDON_LOADED")
 ldr:SetScript("OnEvent", function(self, event, addonName)
-    -- CAMBIA ESTO si el nombre de tu carpeta de addon es distinto a Kaneri_Tool
     if addonName == "Kaneri_Tool" then
         local d = { 
             visibilidadActiva=true, autoRepair=true, autoSell=true, 
@@ -330,12 +343,10 @@ ldr:SetScript("OnEvent", function(self, event, addonName)
             z_world=0, delay=2, alpha=1 
         }
 
-        -- Inicializar Config Global
         if not Kaneri_Tool_Settings then 
             Kaneri_Tool_Settings = { GlobalConfig = d, Bars = {} } 
         end
 
-        -- Inicializar Barras faltantes
         for _, data in ipairs(barList) do
             if not Kaneri_Tool_Settings.Bars[data.id] then
                 Kaneri_Tool_Settings.Bars[data.id] = { 
@@ -346,10 +357,8 @@ ldr:SetScript("OnEvent", function(self, event, addonName)
             end
         end
 
-        -- Construir UI para que esté lista al primer comando
         SetupUI()
-        
-        print("|cffffcc00Kaneri Tool|r cargado. Usa |cffffff00/kt|r para configurar.")
+        print("|cffffcc00Kaneri Tool|r cargado. Usa |cffffff00/kt|r.")
         self:UnregisterEvent("ADDON_LOADED")
     end
 end)
