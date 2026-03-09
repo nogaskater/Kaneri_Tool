@@ -1,6 +1,15 @@
 ## Interface: 120001
 ## Title: Kaneri Tool
-## Notes: Configuración personalizada de visibilidad de barras.
 ## SavedVariables: Kaneri_Tool_Settings
 
-core.lua
+# Carga la base primero
+Config.lua
+Utils.lua
+
+# Carga la lógica (módulos)
+Modules\Visibility.lua
+Modules\Merchant.lua
+
+# Carga la interfaz al final
+UI\Main.lua
+UI\VisibilityConfig.lua
