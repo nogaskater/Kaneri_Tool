@@ -41,45 +41,31 @@ SlashCmdList["KT"] = function(msg)
             KaneriToolOptionsPanel:Hide() 
             if KaneriToolConfigPanel then KaneriToolConfigPanel:Hide() end
         else 
+            -- Posición solicitada: Entre el centro y la esquina superior izquierda
             KaneriToolOptionsPanel:ClearAllPoints()
-            KaneriToolOptionsPanel:SetPoint("CENTER", UIParent, "CENTER")
+            KaneriToolOptionsPanel:SetPoint("TOPLEFT", UIParent, "TOPLEFT", 300, -250)
             KaneriToolOptionsPanel:Show() 
         end
     end
 end
 
--- 3. Motor de Visibilidad (Lógica HUD mejorada)
+-- 3. Motor de Visibilidad
 local barStates = {} 
 local function GetTargetState(cfg)
     if not Kaneri_Tool_Settings or not Kaneri_Tool_Settings.GlobalConfig.visibilidadActiva then return "show" end
-    
     local g = Kaneri_Tool_Settings.GlobalConfig
     local z = 0
-    
-    -- Obtener tipo de instancia real
     local _, instanceType = GetInstanceInfo()
     
-    -- PRIORIDAD DE ZONAS
-    if instanceType == "raid" then
-        z = g.z_raid
-    elseif instanceType == "party" then
-        z = g.z_party
-    elseif instanceType == "scenario" then
-        -- Las Profundidades (Delves) se identifican como 'scenario'
-        z = g.z_delve
-    elseif IsResting() then
-        -- Ciudades y Tabernas (Zonas de descanso)
-        z = g.z_city
-    else
-        -- Mundo abierto y casas/interiores que no son mazmorras
-        z = g.z_world
-    end
+    if instanceType == "raid" then z = g.z_raid
+    elseif instanceType == "party" then z = g.z_party
+    elseif instanceType == "scenario" then z = g.z_delve
+    elseif IsResting() then z = g.z_city
+    else z = g.z_world end
     
-    -- Si la zona tiene un estado forzado (Visible u Oculto)
     if z == 1 then return "show" end
     if z == -1 then return "hide" end
     
-    -- Si está en AUTO (0), evaluamos condiciones
     local any = (cfg.combat and InCombatLockdown()) or 
                 (cfg.exists and UnitExists("target")) or 
                 (cfg.stealth and IsStealthed()) or 
@@ -146,7 +132,7 @@ sellFrame:SetScript("OnEvent", function()
     end
 end)
 
--- 6. INTERFAZ DE USUARIO (SetupUI)
+-- 6. INTERFAZ DE USUARIO
 local function UpdateZoneBtn(btn, val)
     if not btn or not btn.Text then return end
     if val == 1 then btn.Text:SetText("VISIBLE"); btn.Text:SetTextColor(0, 1, 0)
@@ -159,17 +145,16 @@ function SetupUI()
     if not Kaneri_Tool_Settings then return end
 
     local panel = CreateFrame("Frame", "KaneriToolOptionsPanel", UIParent, "BackdropTemplate")
-    panel:SetSize(240, 160); panel:SetPoint("CENTER"); panel:Hide()
+    panel:SetSize(240, 160); panel:Hide()
     panel:SetBackdrop({bgFile = "Interface\\ChatFrame\\ChatFrameBackground", edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border", tile = true, tileSize = 16, edgeSize = 16, insets = { 4, 4, 4, 4 }})
     panel:SetBackdropColor(0, 0, 0, 0.9); panel:SetMovable(true); panel:EnableMouse(true); panel:RegisterForDrag("LeftButton")
     panel:SetClampedToScreen(true)
     panel:SetScript("OnDragStart", panel.StartMoving); panel:SetScript("OnDragStop", panel.StopMovingOrSizing)
 
     local configPanel = CreateFrame("Frame", "KaneriToolConfigPanel", panel, "BackdropTemplate")
-    configPanel:SetSize(800, 720); configPanel:SetPoint("TOPLEFT", panel, "TOPRIGHT", 10, 0); configPanel:Hide()
+    configPanel:SetSize(900, 720); configPanel:SetPoint("TOPLEFT", panel, "TOPRIGHT", 10, 0); configPanel:Hide()
     configPanel:SetBackdrop({bgFile = "Interface\\ChatFrame\\ChatFrameBackground", edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border", tile = true, tileSize = 32, edgeSize = 32, insets = { 8, 8, 8, 8 }})
     configPanel:SetBackdropColor(0, 0, 0, 0.95); configPanel:SetResizable(true); configPanel:SetClampedToScreen(true)
-    if configPanel.SetResizeBounds then configPanel:SetResizeBounds(800, 500, 800, 1000) end
 
     local rb = CreateFrame("Button", nil, configPanel)
     rb:SetPoint("BOTTOMRIGHT", -8, 8); rb:SetSize(16, 16)
@@ -188,7 +173,7 @@ function SetupUI()
 
     local visBtn = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
     visBtn:SetSize(160, 22); visBtn:SetPoint("LEFT", visCB, "RIGHT", 5, 0)
-    visBtn:SetText("Visibilidad Barras")
+    visBtn:SetText("Configurar Barras")
     visBtn:SetScript("OnClick", function() if configPanel:IsShown() then configPanel:Hide() else configPanel:Show() end end)
 
     local repCB = CreateFrame("CheckButton", nil, panel, "InterfaceOptionsCheckButtonTemplate")
@@ -222,8 +207,14 @@ function SetupUI()
         end)
     end
 
-    -- CONDICIONES GLOBALES
-    local cDefs = {{l="En Combate", c="combat"}, {l="Objetivo Hostil", c="harm"}, {l="Tener Objetivo", c="exists"}, {l="En Sigilo", c="stealth"}, {l="|cff00ccffVolando|r", c="flying"}}
+    -- CONDICIONES GLOBALES (Ordenado: Tener Objetivo antes que Hostil)
+    local cDefs = {
+        {l="En Combate", c="combat"}, 
+        {l="Tener Objetivo", c="exists"}, 
+        {l="Objetivo Hostil", c="harm"}, 
+        {l="En Sigilo", c="stealth"}, 
+        {l="|cff00ccffVolando|r", c="flying"}
+    }
     for i, cond in ipairs(cDefs) do
         local cb = CreateFrame("CheckButton", nil, configPanel, "InterfaceOptionsCheckButtonTemplate")
         cb:SetPoint("TOPLEFT", 430, -65 - (i * 26))
@@ -258,13 +249,13 @@ function SetupUI()
     local scrollFrame = CreateFrame("ScrollFrame", "KaneriConfigScroll", configPanel, "UIPanelScrollFrameTemplate")
     scrollFrame:SetPoint("TOPLEFT", 25, -305); scrollFrame:SetPoint("BOTTOMRIGHT", -35, 35)
     local scrollChild = CreateFrame("Frame")
-    scrollChild:SetSize(720, #barList * 35)
+    scrollChild:SetSize(820, #barList * 35)
     scrollFrame:SetScrollChild(scrollChild)
 
     for i, data in ipairs(barList) do
         local y = -((i-1) * 35)
         local row = CreateFrame("Frame", nil, scrollChild)
-        row:SetSize(720, 32); row:SetPoint("TOPLEFT", 0, y)
+        row:SetSize(820, 32); row:SetPoint("TOPLEFT", 0, y)
 
         local cb = CreateFrame("CheckButton", nil, row, "InterfaceOptionsCheckButtonTemplate")
         cb:SetPoint("LEFT", 5, 0); cb:SetSize(24, 24)
@@ -278,7 +269,7 @@ function SetupUI()
         txt:SetPoint("LEFT", mBtn, "RIGHT", 10, 0); txt:SetText(data.label); txt:SetWidth(120); txt:SetJustifyH("LEFT")
 
         local optFrame = CreateFrame("Frame", nil, row)
-        optFrame:SetSize(480, 32); optFrame:SetPoint("LEFT", txt, "RIGHT", 0, 0)
+        optFrame:SetSize(600, 32); optFrame:SetPoint("LEFT", txt, "RIGHT", 5, 0)
 
         local function CreateQuickCB(key, label, x)
             local c = CreateFrame("CheckButton", nil, optFrame, "InterfaceOptionsCheckButtonTemplate")
@@ -288,14 +279,15 @@ function SetupUI()
             return c
         end
 
-        local qComb = CreateQuickCB("combat", "C", 0)
-        local qTarg = CreateQuickCB("exists", "O", 35)
-        local qHarm = CreateQuickCB("harm", "H", 70)
-        local qStea = CreateQuickCB("stealth", "S", 105)
-        local qFly  = CreateQuickCB("flying", "V", 140)
+        -- Nombres enteros en las opciones custom
+        local qComb = CreateQuickCB("combat", "Combate", 0)
+        local qTarg = CreateQuickCB("exists", "Objetivo", 80)
+        local qHarm = CreateQuickCB("harm", "Hostil", 160)
+        local qStea = CreateQuickCB("stealth", "Sigilo", 230)
+        local qFly  = CreateQuickCB("flying", "Vuelo", 300)
 
         local indAlpha = CreateFrame("Slider", "KT_IndAlpha_"..data.id, optFrame, "OptionsSliderTemplate")
-        indAlpha:SetPoint("LEFT", 185, 0); indAlpha:SetWidth(150); indAlpha:SetHeight(14)
+        indAlpha:SetPoint("LEFT", 380, 0); indAlpha:SetWidth(120); indAlpha:SetHeight(14)
         indAlpha:SetMinMaxValues(0.1, 1); indAlpha:SetValueStep(0.1); indAlpha:SetObeyStepOnDrag(true)
         local iTxt = _G[indAlpha:GetName()..'Text']
         indAlpha:SetScript("OnValueChanged", function(self, v)
@@ -342,11 +334,9 @@ ldr:SetScript("OnEvent", function(self, event, addonName)
             flying=true, z_party=0, z_raid=0, z_city=0, z_delve=0, 
             z_world=0, delay=2, alpha=1 
         }
-
         if not Kaneri_Tool_Settings then 
             Kaneri_Tool_Settings = { GlobalConfig = d, Bars = {} } 
         end
-
         for _, data in ipairs(barList) do
             if not Kaneri_Tool_Settings.Bars[data.id] then
                 Kaneri_Tool_Settings.Bars[data.id] = { 
@@ -356,7 +346,6 @@ ldr:SetScript("OnEvent", function(self, event, addonName)
                 }
             end
         end
-
         SetupUI()
         print("|cffffcc00Kaneri Tool|r cargado. Usa |cffffff00/kt|r.")
         self:UnregisterEvent("ADDON_LOADED")
