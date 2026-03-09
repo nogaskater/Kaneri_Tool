@@ -1,6 +1,9 @@
--- 1. Registro del Comando con Toggle y Auto-Centrado de seguridad
+-- 1. Registro del Comando con Toggle, Auto-Centrado y Carga Forzada
 SLASH_KT1 = "/kt"
 SlashCmdList["KT"] = function(msg)
+    -- Si por alguna razón la UI no existe (ej. carga fallida), la creamos al momento
+    if not KaneriToolOptionsPanel then SetupUI() end
+    
     if msg == "toggle" then
         if Kaneri_Tool_Settings and Kaneri_Tool_Settings.GlobalConfig then
             local cfg = Kaneri_Tool_Settings.GlobalConfig
@@ -14,7 +17,7 @@ SlashCmdList["KT"] = function(msg)
             KaneriToolOptionsPanel:Hide() 
             if KaneriToolConfigPanel then KaneriToolConfigPanel:Hide() end
         else 
-            -- SEGURIDAD: Si la ventana estaba fuera, esto la devuelve al centro
+            -- SEGURIDAD: Siempre aparece en el centro al abrirse con /kt
             KaneriToolOptionsPanel:ClearAllPoints()
             KaneriToolOptionsPanel:SetPoint("CENTER", UIParent, "CENTER")
             KaneriToolOptionsPanel:Show() 
@@ -112,22 +115,21 @@ sellFrame:SetScript("OnEvent", function()
     end
 end)
 
--- 6. INTERFAZ DE USUARIO
+-- 6. INTERFAZ DE USUARIO (Mantenidas todas las funciones)
 local function UpdateZoneBtn(btn, val)
     if val == 1 then btn:SetText("VISIBLE"); btn.Text:SetTextColor(0, 1, 0)
     elseif val == -1 then btn:SetText("OCULTO"); btn.Text:SetTextColor(1, 0, 0)
     else btn:SetText("AUTO"); btn.Text:SetTextColor(0.6, 0.6, 1) end
 end
 
-local function SetupUI()
+function SetupUI()
+    if KaneriToolOptionsPanel then return end -- Evitar duplicados
+
     local panel = CreateFrame("Frame", "KaneriToolOptionsPanel", UIParent, "BackdropTemplate")
     panel:SetSize(240, 160); panel:SetPoint("CENTER"); panel:Hide()
     panel:SetBackdrop({bgFile = "Interface\\ChatFrame\\ChatFrameBackground", edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border", tile = true, tileSize = 16, edgeSize = 16, insets = { 4, 4, 4, 4 }})
     panel:SetBackdropColor(0, 0, 0, 0.9); panel:SetMovable(true); panel:EnableMouse(true); panel:RegisterForDrag("LeftButton")
-    
-    -- ESTO EVITA QUE SE SALGA DE LA PANTALLA
     panel:SetClampedToScreen(true)
-    
     panel:SetScript("OnDragStart", panel.StartMoving); panel:SetScript("OnDragStop", panel.StopMovingOrSizing)
 
     local configPanel = CreateFrame("Frame", "KaneriToolConfigPanel", panel, "BackdropTemplate")
@@ -135,7 +137,7 @@ local function SetupUI()
     configPanel:SetBackdrop({bgFile = "Interface\\ChatFrame\\ChatFrameBackground", edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border", tile = true, tileSize = 32, edgeSize = 32, insets = { 8, 8, 8, 8 }})
     configPanel:SetBackdropColor(0, 0, 0, 0.95)
     configPanel:SetResizable(true)
-    configPanel:SetClampedToScreen(true) -- También para la ventana grande
+    configPanel:SetClampedToScreen(true)
     if configPanel.SetResizeBounds then configPanel:SetResizeBounds(800, 500, 800, 1000) end
 
     local rb = CreateFrame("Button", nil, configPanel)
@@ -295,18 +297,22 @@ local function SetupUI()
     CreateFrame("Button", nil, configPanel, "UIPanelCloseButton"):SetPoint("TOPRIGHT", -5, -5)
 end
 
--- 7. Carga
+-- 7. Carga Robusta (Al entrar al mundo)
 local ldr = CreateFrame("Frame")
-ldr:RegisterEvent("ADDON_LOADED")
-ldr:SetScript("OnEvent", function(self, event, addon)
-    if addon ~= "Kaneri_Tool" then return end
+ldr:RegisterEvent("PLAYER_ENTERING_WORLD")
+ldr:SetScript("OnEvent", function(self)
     local d = { visibilidadActiva=true, autoRepair=true, autoSell=true, combat=true, harm=true, exists=true, stealth=false, flying=true, z_party=0, z_raid=0, z_city=0, z_delve=0, z_world=0, delay=2, alpha=1 }
-    if not Kaneri_Tool_Settings then Kaneri_Tool_Settings = { GlobalConfig = d, Bars = {} } end
+    
+    if not Kaneri_Tool_Settings then 
+        Kaneri_Tool_Settings = { GlobalConfig = d, Bars = {} } 
+    end
+    
     for _, data in ipairs(barList) do
         if not Kaneri_Tool_Settings.Bars[data.id] then
             Kaneri_Tool_Settings.Bars[data.id] = { enabled = false, isCustom = false, customConfig = CopyTable(d) }
         end
     end
+    
     SetupUI()
     self:UnregisterAllEvents()
 end)
