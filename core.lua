@@ -42,7 +42,7 @@ local function GetTargetState(cfg)
     return any and "show" or "hide"
 end
 
--- 4. Aplicación de Alpha
+-- 4. Aplicación de Alpha (Motor de Animación)
 local engine = CreateFrame("Frame")
 engine:SetScript("OnUpdate", function(self, elapsed)
     if not Kaneri_Tool_Settings or not Kaneri_Tool_Settings.Bars then return end
@@ -59,14 +59,18 @@ engine:SetScript("OnUpdate", function(self, elapsed)
                     local target = GetTargetState(cfg)
                     if not barStates[data.id] then barStates[data.id] = { last = "hide", timer = 0 } end
                     local s = barStates[data.id]
+                    
                     if target == "show" then s.timer = 0; s.last = "show"
                     elseif s.last == "show" then
                         if s.timer == 0 then s.timer = GetTime() + (cfg.delay or 0) end
                         if GetTime() >= s.timer then s.last = "hide" end
                     end
-                    local tAlpha = (s.last == "show" or isEditing) and 1 or 0
+                    
+                    local maxAlpha = cfg.alpha or 1
+                    local tAlpha = (s.last == "show" or isEditing) and maxAlpha or 0
                     local cAlpha = frame:GetAlpha()
-                    if cAlpha ~= tAlpha then
+                    
+                    if math.abs(cAlpha - tAlpha) > 0.01 then
                         local step = elapsed * 3
                         frame:SetAlpha(cAlpha < tAlpha and math.min(tAlpha, cAlpha + step) or math.max(tAlpha, cAlpha - step))
                     end
@@ -76,7 +80,7 @@ engine:SetScript("OnUpdate", function(self, elapsed)
     end
 end)
 
--- 5. Venta y Reparación
+-- 5. Lógica de Mercader
 local sellFrame = CreateFrame("Frame")
 sellFrame:RegisterEvent("MERCHANT_SHOW")
 sellFrame:SetScript("OnEvent", function()
@@ -95,17 +99,12 @@ panel:SetBackdrop({bgFile = "Interface\\ChatFrame\\ChatFrameBackground", edgeFil
 panel:SetBackdropColor(0, 0, 0, 0.9); panel:SetMovable(true); panel:EnableMouse(true); panel:RegisterForDrag("LeftButton")
 panel:SetScript("OnDragStart", panel.StartMoving); panel:SetScript("OnDragStop", panel.StopMovingOrSizing)
 
--- PANEL DE CONFIGURACIÓN (Ajuste para API moderna)
 local configPanel = CreateFrame("Frame", "KaneriToolConfigPanel", panel, "BackdropTemplate")
 configPanel:SetSize(800, 720); configPanel:SetPoint("TOPLEFT", panel, "TOPRIGHT", 10, 0); configPanel:Hide()
 configPanel:SetBackdrop({bgFile = "Interface\\ChatFrame\\ChatFrameBackground", edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border", tile = true, tileSize = 32, edgeSize = 32, insets = { 8, 8, 8, 8 }})
 configPanel:SetBackdropColor(0, 0, 0, 0.95)
-
--- ARREGLO PARA RESIZE (API MODERNA)
 configPanel:SetResizable(true)
-if configPanel.SetResizeBounds then
-    configPanel:SetResizeBounds(800, 500, 800, 1000)
-end
+if configPanel.SetResizeBounds then configPanel:SetResizeBounds(800, 500, 800, 1000) end
 
 local rb = CreateFrame("Button", nil, configPanel)
 rb:SetPoint("BOTTOMRIGHT", -8, 8); rb:SetSize(16, 16)
@@ -121,10 +120,10 @@ local function UpdateZoneBtn(btn, val)
 end
 
 local function SetupUI()
-    -- PANEL PRINCIPAL
+    -- PANEL PEQUEÑO
     local title = panel:CreateFontString(nil, "ARTWORK", "GameFontNormal")
     title:SetPoint("TOP", 0, -12); title:SetText("Kaneri Tool")
-
+    
     local visCB = CreateFrame("CheckButton", nil, panel, "InterfaceOptionsCheckButtonTemplate")
     visCB:SetPoint("TOPLEFT", 15, -40); visCB:SetSize(24, 24)
     visCB:SetChecked(Kaneri_Tool_Settings.GlobalConfig.visibilidadActiva)
@@ -151,10 +150,9 @@ local function SetupUI()
     local cfgTitle = configPanel:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
     cfgTitle:SetPoint("TOP", 0, -20); cfgTitle:SetText("Configuración de Visibilidad")
 
-    -- ZONAS (IZQ) Y CONDICIONES (DER)
+    -- SECCIÓN 1: ZONAS (IZQ)
     local sZonas = configPanel:CreateFontString(nil, "ARTWORK", "GameFontNormal")
     sZonas:SetPoint("TOPLEFT", 40, -60); sZonas:SetText("Reglas por Zona (Global)")
-    
     local zDefs = {{l="Exteriores", c="z_world"}, {l="Ciudades", c="z_city"}, {l="Profundidades", c="z_delve"}, {l="Mazmorras", c="z_party"}, {l="Bandas", c="z_raid"}}
     for i, z in ipairs(zDefs) do
         local l = configPanel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
@@ -169,9 +167,9 @@ local function SetupUI()
         end)
     end
 
+    -- SECCIÓN 2: CONDICIONES (DER)
     local sConds = configPanel:CreateFontString(nil, "ARTWORK", "GameFontNormal")
     sConds:SetPoint("TOPLEFT", 420, -60); sConds:SetText("Condiciones 'AUTO' (Global)")
-    
     local cDefs = {{l="En Combate", c="combat"}, {l="Objetivo Hostil", c="harm"}, {l="Tener Objetivo", c="exists"}, {l="En Sigilo", c="stealth"}, {l="|cff00ccffVolando|r", c="flying"}}
     for i, cond in ipairs(cDefs) do
         local cb = CreateFrame("CheckButton", nil, configPanel, "InterfaceOptionsCheckButtonTemplate")
@@ -180,39 +178,45 @@ local function SetupUI()
         cb:SetScript("OnClick", function(self) Kaneri_Tool_Settings.GlobalConfig[cond.c] = self:GetChecked() end)
     end
 
-    -- SECCIÓN SLIDER (Aislada entre bloques)
+    -- SECCIÓN 3: SLIDERS GLOBALES
     local sliderBox = CreateFrame("Frame", nil, configPanel)
-    sliderBox:SetPoint("TOP", 0, -215); sliderBox:SetSize(720, 50)
+    sliderBox:SetPoint("TOP", 0, -215); sliderBox:SetSize(720, 60)
     
-    local slider = CreateFrame("Slider", "KaneriDelaySlider", sliderBox, "OptionsSliderTemplate")
-    slider:SetPoint("CENTER", 0, 0); slider:SetWidth(500)
-    slider:SetMinMaxValues(0, 30); slider:SetValueStep(1); slider:SetObeyStepOnDrag(true)
-    slider:SetValue(Kaneri_Tool_Settings.GlobalConfig.delay or 2)
-    _G[slider:GetName()..'Text']:SetText("Retraso Global: "..slider:GetValue().."s")
-    slider:SetScript("OnValueChanged", function(self, v)
-        local val = math.floor(v)
-        _G[self:GetName()..'Text']:SetText("Retraso Global: "..val.."s")
-        Kaneri_Tool_Settings.GlobalConfig.delay = val
-    end)
+    local function CreateGlobalSlider(name, label, xOff, min, max, key)
+        local s = CreateFrame("Slider", name, sliderBox, "OptionsSliderTemplate")
+        s:SetPoint("CENTER", xOff, 0); s:SetWidth(280)
+        s:SetMinMaxValues(min, max); s:SetValueStep(key == "alpha" and 0.05 or 1); s:SetObeyStepOnDrag(true)
+        s:SetValue(Kaneri_Tool_Settings.GlobalConfig[key] or (key == "alpha" and 1 or 2))
+        
+        local txt = _G[s:GetName()..'Text']
+        local function UpdateText(val)
+            if key == "alpha" then txt:SetText(label..": "..math.floor(val*100).."%")
+            else txt:SetText(label..": "..val.."s") end
+        end
+        UpdateText(s:GetValue())
+        s:SetScript("OnValueChanged", function(self, v)
+            Kaneri_Tool_Settings.GlobalConfig[key] = v
+            UpdateText(v)
+        end)
+    end
 
-    -- SECCIÓN INFERIOR: BARRAS
+    CreateGlobalSlider("KaneriGlobalDelay", "Retraso", -160, 0, 30, "delay")
+    CreateGlobalSlider("KaneriGlobalAlpha", "Opacidad Máxima", 160, 0.1, 1, "alpha")
+
+    -- SECCIÓN 4: LISTA DE BARRAS
     local sep = configPanel:CreateTexture(nil, "ARTWORK")
-    sep:SetSize(720, 1); sep:SetColorTexture(1, 1, 1, 0.1); sep:SetPoint("TOP", sliderBox, "BOTTOM", 0, -5)
-
-    local sBars = configPanel:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-    sBars:SetPoint("TOPLEFT", 30, -280); sBars:SetText("Configuración de Elementos Individuales")
+    sep:SetSize(720, 1); sep:SetColorTexture(1, 1, 1, 0.1); sep:SetPoint("TOP", sliderBox, "BOTTOM", 0, 0)
 
     local scrollFrame = CreateFrame("ScrollFrame", "KaneriConfigScroll", configPanel, "UIPanelScrollFrameTemplate")
     scrollFrame:SetPoint("TOPLEFT", 25, -305); scrollFrame:SetPoint("BOTTOMRIGHT", -35, 35)
-    
     local scrollChild = CreateFrame("Frame")
     scrollChild:SetSize(720, 420)
     scrollFrame:SetScrollChild(scrollChild)
 
     for i, data in ipairs(barList) do
-        local y = -((i-1) * 30)
+        local y = -((i-1) * 35)
         local row = CreateFrame("Frame", nil, scrollChild)
-        row:SetSize(720, 28); row:SetPoint("TOPLEFT", 0, y)
+        row:SetSize(720, 32); row:SetPoint("TOPLEFT", 0, y)
 
         local cb = CreateFrame("CheckButton", nil, row, "InterfaceOptionsCheckButtonTemplate")
         cb:SetPoint("LEFT", 5, 0); cb:SetSize(24, 24)
@@ -223,10 +227,10 @@ local function SetupUI()
         mBtn:SetSize(80, 20); mBtn:SetPoint("LEFT", cb, "RIGHT", 5, 0)
         
         local txt = row:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
-        txt:SetPoint("LEFT", mBtn, "RIGHT", 10, 0); txt:SetText(data.label); txt:SetWidth(140); txt:SetJustifyH("LEFT")
+        txt:SetPoint("LEFT", mBtn, "RIGHT", 10, 0); txt:SetText(data.label); txt:SetWidth(120); txt:SetJustifyH("LEFT")
 
         local optFrame = CreateFrame("Frame", nil, row)
-        optFrame:SetSize(450, 28); optFrame:SetPoint("LEFT", txt, "RIGHT", 10, 0)
+        optFrame:SetSize(480, 32); optFrame:SetPoint("LEFT", txt, "RIGHT", 0, 0)
 
         local function CreateQuickCB(key, label, x)
             local c = CreateFrame("CheckButton", nil, optFrame, "InterfaceOptionsCheckButtonTemplate")
@@ -236,12 +240,24 @@ local function SetupUI()
             return c
         end
 
-        local qComb = CreateQuickCB("combat", "Combate", 0)
-        local qTarg = CreateQuickCB("exists", "Objetivo", 90)
-        local qHarm = CreateQuickCB("harm", "Hostil", 180)
-        local qStea = CreateQuickCB("stealth", "Sigilo", 260)
-        local qFly  = CreateQuickCB("flying", "Vuelo", 340)
+        local qComb = CreateQuickCB("combat", "C", 0)
+        local qTarg = CreateQuickCB("exists", "O", 35)
+        local qHarm = CreateQuickCB("harm", "H", 70)
+        local qStea = CreateQuickCB("stealth", "S", 105)
+        local qFly  = CreateQuickCB("flying", "V", 140)
+
+        -- Slider de Opacidad Individual (Corregido sistema de texto)
+        local indAlpha = CreateFrame("Slider", "KT_IndAlpha_"..data.id, optFrame, "OptionsSliderTemplate")
+        indAlpha:SetPoint("LEFT", 185, 0); indAlpha:SetWidth(150); indAlpha:SetHeight(14)
+        indAlpha:SetMinMaxValues(0.1, 1); indAlpha:SetValueStep(0.1); indAlpha:SetObeyStepOnDrag(true)
         
+        local iTxt = _G[indAlpha:GetName()..'Text']
+        indAlpha:SetScript("OnValueChanged", function(self, v)
+            Kaneri_Tool_Settings.Bars[data.id].customConfig.alpha = v
+            iTxt:SetText("Alpha: "..math.floor(v*100).."%")
+        end)
+        _G[indAlpha:GetName()..'Low']:SetText(""); _G[indAlpha:GetName()..'High']:SetText("")
+
         local function Refresh()
             local isC = Kaneri_Tool_Settings.Bars[data.id].isCustom
             mBtn:SetText(isC and "CUSTOM" or "GLOBAL")
@@ -252,6 +268,8 @@ local function SetupUI()
                 local cfg = Kaneri_Tool_Settings.Bars[data.id].customConfig
                 qComb:SetChecked(cfg.combat); qTarg:SetChecked(cfg.exists)
                 qHarm:SetChecked(cfg.harm); qStea:SetChecked(cfg.stealth); qFly:SetChecked(cfg.flying)
+                indAlpha:SetValue(cfg.alpha or 1)
+                iTxt:SetText("Alpha: "..math.floor((cfg.alpha or 1)*100).."%")
             else optFrame:Hide() end
         end
 
@@ -265,16 +283,27 @@ local function SetupUI()
     CreateFrame("Button", nil, configPanel, "UIPanelCloseButton"):SetPoint("TOPRIGHT", -5, -5)
 end
 
--- 7. Carga
+-- 7. Carga e Inicialización
 local ldr = CreateFrame("Frame")
 ldr:RegisterEvent("ADDON_LOADED")
 ldr:SetScript("OnEvent", function(self, event, addon)
     if addon ~= "Kaneri_Tool" then return end
-    local d = { visibilidadActiva=true, autoRepair=true, autoSell=true, combat=true, harm=true, exists=true, stealth=false, flying=true, z_party=0, z_raid=0, z_city=0, z_delve=0, z_world=0, delay=2 }
+    local d = { 
+        visibilidadActiva=true, autoRepair=true, autoSell=true, 
+        combat=true, harm=true, exists=true, stealth=false, flying=true, 
+        z_party=0, z_raid=0, z_city=0, z_delve=0, z_world=0, 
+        delay=2, alpha=1 
+    }
     if not Kaneri_Tool_Settings then Kaneri_Tool_Settings = { GlobalConfig = d, Bars = {} } end
+    if Kaneri_Tool_Settings.GlobalConfig.alpha == nil then Kaneri_Tool_Settings.GlobalConfig.alpha = 1 end
+    
     for _, data in ipairs(barList) do
         if not Kaneri_Tool_Settings.Bars[data.id] then
             Kaneri_Tool_Settings.Bars[data.id] = { enabled = false, isCustom = false, customConfig = CopyTable(d) }
+        else
+            if Kaneri_Tool_Settings.Bars[data.id].customConfig.alpha == nil then
+                Kaneri_Tool_Settings.Bars[data.id].customConfig.alpha = 1
+            end
         end
     end
     SetupUI()
