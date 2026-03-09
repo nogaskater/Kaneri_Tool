@@ -1,4 +1,4 @@
--- 1. Registro del Comando con función Toggle
+-- 1. Registro del Comando
 SLASH_KT1 = "/kt"
 SlashCmdList["KT"] = function(msg)
     if msg == "toggle" then
@@ -6,15 +6,14 @@ SlashCmdList["KT"] = function(msg)
             local newState = not Kaneri_Tool_Settings.GlobalConfig.forceShowAll
             Kaneri_Tool_Settings.GlobalConfig.forceShowAll = newState
             if KaneriToolMasterCB then KaneriToolMasterCB:SetChecked(newState) end
-            local status = newState and "|cff00ff00VISIBLE (Forzado)|r" or "|cff00ccffAUTOMÁTICO|r"
-            print("|cffffcc00Kaneri Tool:|r HUD en modo " .. status)
+            print("|cffffcc00Kaneri Tool:|r HUD en modo " .. (newState and "|cff00ff00VISIBLE|r" or "|cff00ccffAUTO|r"))
         end
     else
         if KaneriToolOptionsPanel:IsShown() then KaneriToolOptionsPanel:Hide() else KaneriToolOptionsPanel:Show() end
     end
 end
 
--- 2. Configuración de Barras y Marcos
+-- 2. Lista de Marcos
 local barList = {
     { id = "PlayerFrame", label = "Retrato Jugador" },
     { id = "PetFrame", label = "Retrato Pet" },
@@ -31,7 +30,7 @@ local barList = {
     { id = "DamageMeterSessionWindow2", label = "Ventana Recount 2" }
 }
 
--- 3. Motor de Decisiones (HUD)
+-- 3. Motor HUD (Lógica de visibilidad)
 local delayEndTime, isCountingDown, lastFinalState, fadeSpeed = 0, false, "hide", 3 
 
 local function GetTargetState()
@@ -39,6 +38,7 @@ local function GetTargetState()
     local cfg = Kaneri_Tool_Settings.GlobalConfig
     if cfg.forceShowAll then isCountingDown = false return "show" end
 
+    -- Prioridad por Zonas
     local zoneResult = 0
     if IsResting() and cfg.z_city ~= 0 then zoneResult = cfg.z_city
     elseif (IsInRaid() and IsIndoors()) and cfg.z_raid ~= 0 then zoneResult = cfg.z_raid
@@ -49,25 +49,37 @@ local function GetTargetState()
     if zoneResult == 1 then isCountingDown = false return "show" 
     elseif zoneResult == -1 then isCountingDown = false return "hide" end
 
-    local anyAuto = (cfg.combat and InCombatLockdown()) or (cfg.exists and UnitExists("target")) or 
-                    (cfg.stealth and IsStealthed()) or (cfg.harm and UnitCanAttack("player", "target"))
+    -- Condiciones Automáticas (Nueva: Flying)
+    local anyAuto = (cfg.combat and InCombatLockdown()) or 
+                    (cfg.exists and UnitExists("target")) or 
+                    (cfg.stealth and IsStealthed()) or 
+                    (cfg.harm and UnitCanAttack("player", "target")) or
+                    (cfg.flying and IsFlying())
 
     if anyAuto then isCountingDown = false return "show" end
+    
+    -- Manejo del Retraso (Delay)
     if lastFinalState == "show" and not anyAuto then
-        if not isCountingDown then delayEndTime = GetTime() + (cfg.delay or 0) isCountingDown = true end
+        if not isCountingDown then 
+            delayEndTime = GetTime() + (cfg.delay or 0) 
+            isCountingDown = true 
+        end
     end
+    
     if isCountingDown then
         if GetTime() < delayEndTime then return "show" else isCountingDown = false return "hide" end
     end
+    
     return "hide"
 end
 
--- 4. Aplicación con FADE
+-- 4. Aplicación de Alpha (Fade)
 local engine = CreateFrame("Frame")
 engine:SetScript("OnUpdate", function(self, elapsed)
     local isEditing = EditModeManagerFrame and EditModeManagerFrame:IsShown()
     local state = GetTargetState()
     local targetAlpha = (state == "show" or isEditing) and 1 or 0
+    
     for _, data in ipairs(barList) do
         local frame = _G[data.id]
         if frame then
@@ -85,25 +97,15 @@ engine:SetScript("OnUpdate", function(self, elapsed)
     lastFinalState = state
 end)
 
--- 5. Lógica de Vendedor Pro (Reparación y Venta Nativa)
-local sellingFrame = CreateFrame("Frame")
-
-sellingFrame:RegisterEvent("MERCHANT_SHOW")
-sellingFrame:SetScript("OnEvent", function()
+-- 5. Vendedor y Reparación
+local sellFrame = CreateFrame("Frame")
+sellFrame:RegisterEvent("MERCHANT_SHOW")
+sellFrame:SetScript("OnEvent", function()
     if not Kaneri_Tool_Settings then return end
     local cfg = Kaneri_Tool_Settings.GlobalConfig
-
-    -- 1. Venta de Chatarra (Método Nativo de Blizzard)
-    if cfg.autoSell then
-        -- C_MerchantFrame.SellAllJunkItems() es la función que pulsa el "botón" por ti
-        if C_MerchantFrame.GetNumJunkItems() > 0 then
-            C_MerchantFrame.SellAllJunkItems()
-            -- Nota: El mensaje de oro total lo suele dar el propio juego o addons de chat,
-            -- pero si quieres tu propio mensaje, tendrías que registrar MERCHANT_CLOSED.
-        end
+    if cfg.autoSell and C_MerchantFrame.GetNumJunkItems() > 0 then
+        C_MerchantFrame.SellAllJunkItems()
     end
-
-    -- 2. Reparación instantánea
     if cfg.autoRepair and CanMerchantRepair() then
         local cost = GetRepairAllCost()
         if cost > 0 and GetMoney() >= cost then
@@ -121,7 +123,7 @@ panel:SetBackdropColor(0, 0, 0, 0.95)
 panel:SetMovable(true); panel:EnableMouse(true); panel:RegisterForDrag("LeftButton")
 panel:SetScript("OnDragStart", panel.StartMoving); panel:SetScript("OnDragStop", panel.StopMovingOrSizing)
 
-local function UpdateZoneButton(btn, val)
+local function UpdateZoneBtn(btn, val)
     if val == 1 then btn:SetText("VISIBLE"); btn.Text:SetTextColor(0, 1, 0)
     elseif val == -1 then btn:SetText("OCULTO"); btn.Text:SetTextColor(1, 0, 0)
     else btn:SetText("AUTO"); btn.Text:SetTextColor(0.6, 0.6, 1) end
@@ -131,6 +133,7 @@ local function SetupUI()
     local title = panel:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
     title:SetPoint("TOP", 0, -20); title:SetText("Kaneri Tool")
 
+    -- Checkboxes superiores
     local masterCB = CreateFrame("CheckButton", "KaneriToolMasterCB", panel, "InterfaceOptionsCheckButtonTemplate")
     masterCB:SetPoint("TOPLEFT", 30, -45); masterCB.Text:SetText("|cff00ff00HUD SIEMPRE ON|r")
     masterCB:SetChecked(Kaneri_Tool_Settings.GlobalConfig.forceShowAll)
@@ -146,6 +149,7 @@ local function SetupUI()
     sellCB:SetChecked(Kaneri_Tool_Settings.GlobalConfig.autoSell)
     sellCB:SetScript("OnClick", function(self) Kaneri_Tool_Settings.GlobalConfig.autoSell = self:GetChecked() end)
 
+    -- 1. Elementos
     local s1 = panel:CreateFontString(nil, "ARTWORK", "GameFontNormal")
     s1:SetPoint("TOPLEFT", 30, -85); s1:SetText("1. Elementos a controlar")
     for i, data in ipairs(barList) do
@@ -157,6 +161,7 @@ local function SetupUI()
         cb:SetScript("OnClick", function(self) Kaneri_Tool_Settings.ActiveBars[data.id] = self:GetChecked() end)
     end
 
+    -- 2. Zonas
     local s2 = panel:CreateFontString(nil, "ARTWORK", "GameFontNormal")
     s2:SetPoint("TOPLEFT", 30, -310); s2:SetText("2. Comportamiento por Zona")
     local zones = {{l="Exteriores", c="z_world"}, {l="Ciudades", c="z_city"}, {l="Profundidades", c="z_delve"}, {l="Mazmorras", c="z_party"}, {l="Bandas", c="z_raid"}}
@@ -165,17 +170,22 @@ local function SetupUI()
         label:SetPoint("TOPLEFT", 40, -325 - (i * 30)); label:SetText(zone.l)
         local btn = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
         btn:SetSize(100, 22); btn:SetPoint("LEFT", label, "RIGHT", 130, 0)
-        UpdateZoneButton(btn, Kaneri_Tool_Settings.GlobalConfig[zone.c])
+        UpdateZoneBtn(btn, Kaneri_Tool_Settings.GlobalConfig[zone.c])
         btn:SetScript("OnClick", function(self)
             local cur = Kaneri_Tool_Settings.GlobalConfig[zone.c]
             Kaneri_Tool_Settings.GlobalConfig[zone.c] = (cur == 0) and 1 or (cur == 1 and -1 or 0)
-            UpdateZoneButton(self, Kaneri_Tool_Settings.GlobalConfig[zone.c])
+            UpdateZoneBtn(self, Kaneri_Tool_Settings.GlobalConfig[zone.c])
         end)
     end
 
+    -- 3. Condiciones AUTO (Incluye Volando)
     local s3 = panel:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-    s3:SetPoint("TOPLEFT", 30, -510); s3:SetText("3. Condiciones 'AUTO' y Tiempos")
-    local conds = {{l="En Combate", c="combat"}, {l="Objetivo Hostil", c="harm"}, {l="Tener Objetivo", c="exists"}, {l="En Sigilo", c="stealth"}}
+    s3:SetPoint("TOPLEFT", 30, -510); s3:SetText("3. Condiciones 'AUTO' (Mostrar si...)")
+    local conds = {
+        {l="En Combate", c="combat"}, {l="Objetivo Hostil", c="harm"}, 
+        {l="Tener Objetivo", c="exists"}, {l="En Sigilo", c="stealth"},
+        {l="|cff00ccffVolando|r", c="flying"}
+    }
     for i, cond in ipairs(conds) do
         local cb = CreateFrame("CheckButton", nil, panel, "InterfaceOptionsCheckButtonTemplate")
         local col, row = (i % 2 == 0) and 1 or 0, math.floor((i - 1) / 2)
@@ -185,8 +195,9 @@ local function SetupUI()
         cb:SetScript("OnClick", function(self) Kaneri_Tool_Settings.GlobalConfig[cond.c] = self:GetChecked() end)
     end
 
+    -- Slider Delay
     local slider = CreateFrame("Slider", "KaneriDelaySlider", panel, "OptionsSliderTemplate")
-    slider:SetPoint("TOPLEFT", 40, -630); slider:SetWidth(380)
+    slider:SetPoint("TOPLEFT", 40, -660); slider:SetWidth(380)
     slider:SetMinMaxValues(0, 30); slider:SetValueStep(1); slider:SetObeyStepOnDrag(true)
     slider:SetValue(Kaneri_Tool_Settings.GlobalConfig.delay or 2)
     _G[slider:GetName() .. 'Text']:SetText("Retraso al ocultar: " .. slider:GetValue() .. "s")
@@ -206,7 +217,7 @@ loader:SetScript("OnEvent", function(self, event, addon)
     if addon == "Kaneri_Tool" then
         if not Kaneri_Tool_Settings then 
             Kaneri_Tool_Settings = { 
-                GlobalConfig = { forceShowAll=false, autoRepair=true, autoSell=true, combat=true, harm=true, exists=true, stealth=false, z_party=0, z_raid=0, z_city=0, z_delve=0, z_world=0, delay=2 }, 
+                GlobalConfig = { forceShowAll=false, autoRepair=true, autoSell=true, combat=true, harm=true, exists=true, stealth=false, flying=true, z_party=0, z_raid=0, z_city=0, z_delve=0, z_world=0, delay=2 }, 
                 ActiveBars = {} 
             } 
         end
