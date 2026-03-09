@@ -3,10 +3,11 @@ SLASH_KT1 = "/kt"
 SlashCmdList["KT"] = function(msg)
     if msg == "toggle" then
         if Kaneri_Tool_Settings and Kaneri_Tool_Settings.GlobalConfig then
-            local newState = not Kaneri_Tool_Settings.GlobalConfig.forceShowAll
-            Kaneri_Tool_Settings.GlobalConfig.forceShowAll = newState
+            -- Invertimos el estado de la visibilidad
+            local newState = not Kaneri_Tool_Settings.GlobalConfig.visibilidadActiva
+            Kaneri_Tool_Settings.GlobalConfig.visibilidadActiva = newState
             if KaneriToolMasterCB then KaneriToolMasterCB:SetChecked(newState) end
-            print("|cffffcc00Kaneri Tool:|r HUD " .. (newState and "|cff00ff00ON|r" or "|cff00ccffAUTO|r"))
+            print("|cffffcc00Kaneri Tool:|r Visibilidad dinámica " .. (newState and "|cff00ff00ACTIVADA|r" or "|cffff0000DESACTIVADA|r"))
         end
     else
         if KaneriToolOptionsPanel:IsShown() then KaneriToolOptionsPanel:Hide() else KaneriToolOptionsPanel:Show() end
@@ -30,20 +31,25 @@ local barList = {
     { id = "DamageMeterSessionWindow2", label = "Recount 2" }
 }
 
--- 3. Motor HUD
+-- 3. Motor HUD (Lógica de visibilidad)
 local barStates = {} 
 local function GetTargetState(cfg)
     if not cfg then return "show" end
-    if cfg.forceShowAll then return "show" end
+    -- Si la visibilidad global está apagada, forzamos mostrar siempre
+    if not Kaneri_Tool_Settings.GlobalConfig.visibilidadActiva then return "show" end
+
     local z = 0
     if IsResting() and cfg.z_city ~= 0 then z = cfg.z_city
     elseif (IsInRaid() and IsIndoors()) and cfg.z_raid ~= 0 then z = cfg.z_raid
     elseif (IsInGroup() and IsIndoors()) and cfg.z_party ~= 0 then z = cfg.z_party
     elseif IsIndoors() and not IsInGroup() and cfg.z_delve ~= 0 then z = cfg.z_delve
     elseif cfg.z_world ~= 0 then z = cfg.z_world end
+    
     if z == 1 then return "show" elseif z == -1 then return "hide" end
+    
     local any = (cfg.combat and InCombatLockdown()) or (cfg.exists and UnitExists("target")) or 
                 (cfg.stealth and IsStealthed()) or (cfg.harm and UnitCanAttack("player", "target")) or (cfg.flying and IsFlying())
+    
     return any and "show" or "hide"
 end
 
@@ -52,27 +58,38 @@ local engine = CreateFrame("Frame")
 engine:SetScript("OnUpdate", function(self, elapsed)
     if not Kaneri_Tool_Settings or not Kaneri_Tool_Settings.Bars then return end
     local isEditing = EditModeManagerFrame and EditModeManagerFrame:IsShown()
+    
     for _, data in ipairs(barList) do
         local frame = _G[data.id]
         if frame then
             local b = Kaneri_Tool_Settings.Bars[data.id]
+            -- Si la visibilidad está desactivada globalmente, todas las barras habilitadas van a Alpha 1
             if b and b.enabled then
-                local cfg = b.isCustom and b.customConfig or Kaneri_Tool_Settings.GlobalConfig
-                local target = GetTargetState(cfg)
-                if not barStates[data.id] then barStates[data.id] = { last = "hide", timer = 0 } end
-                local s = barStates[data.id]
-                if target == "show" then s.timer = 0; s.last = "show"
-                elseif s.last == "show" then
-                    if s.timer == 0 then s.timer = GetTime() + (cfg.delay or 0) end
-                    if GetTime() >= s.timer then s.last = "hide" end
+                if not Kaneri_Tool_Settings.GlobalConfig.visibilidadActiva then
+                    if frame:GetAlpha() ~= 1 then frame:SetAlpha(1) end
+                else
+                    local cfg = b.isCustom and b.customConfig or Kaneri_Tool_Settings.GlobalConfig
+                    local target = GetTargetState(cfg)
+                    
+                    if not barStates[data.id] then barStates[data.id] = { last = "hide", timer = 0 } end
+                    local s = barStates[data.id]
+                    
+                    if target == "show" then s.timer = 0; s.last = "show"
+                    elseif s.last == "show" then
+                        if s.timer == 0 then s.timer = GetTime() + (cfg.delay or 0) end
+                        if GetTime() >= s.timer then s.last = "hide" end
+                    end
+                    
+                    local tAlpha = (s.last == "show" or isEditing) and 1 or 0
+                    local cAlpha = frame:GetAlpha()
+                    if cAlpha ~= tAlpha then
+                        local step = elapsed * 3
+                        frame:SetAlpha(cAlpha < tAlpha and math.min(tAlpha, cAlpha + step) or math.max(tAlpha, cAlpha - step))
+                    end
                 end
-                local tAlpha = (s.last == "show" or isEditing) and 1 or 0
-                local cAlpha = frame:GetAlpha()
-                if cAlpha ~= tAlpha then
-                    local step = elapsed * 3
-                    frame:SetAlpha(cAlpha < tAlpha and math.min(tAlpha, cAlpha + step) or math.max(tAlpha, cAlpha - step))
-                end
-            else if frame:GetAlpha() ~= 1 then frame:SetAlpha(1) end end
+            else 
+                if frame:GetAlpha() ~= 1 then frame:SetAlpha(1) end 
+            end
         end
     end
 end)
@@ -89,7 +106,7 @@ sellFrame:SetScript("OnEvent", function()
     end
 end)
 
--- 6. Interfaz de Usuario (ANCHO AUMENTADO)
+-- 6. Interfaz de Usuario
 local panel = CreateFrame("Frame", "KaneriToolOptionsPanel", UIParent, "BackdropTemplate")
 panel:SetSize(800, 710); panel:SetPoint("CENTER"); panel:Hide()
 panel:SetBackdrop({bgFile = "Interface\\ChatFrame\\ChatFrameBackground", edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border", tile = true, tileSize = 32, edgeSize = 32, insets = { 8, 8, 8, 8 }})
@@ -106,11 +123,14 @@ local function SetupUI()
     local title = panel:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
     title:SetPoint("TOP", 0, -20); title:SetText("Kaneri Tool")
 
-    -- Superior
+    -- BOTÓN MAESTRO INVERTIDO
     local masterCB = CreateFrame("CheckButton", "KaneriToolMasterCB", panel, "InterfaceOptionsCheckButtonTemplate")
-    masterCB:SetPoint("TOPLEFT", 100, -45); masterCB.Text:SetText("|cff00ff00HUD SIEMPRE ON|r")
-    masterCB:SetChecked(Kaneri_Tool_Settings.GlobalConfig.forceShowAll)
-    masterCB:SetScript("OnClick", function(self) Kaneri_Tool_Settings.GlobalConfig.forceShowAll = self:GetChecked() end)
+    masterCB:SetPoint("TOPLEFT", 100, -45); masterCB.Text:SetText("|cff00ccffVisibilidad Barras|r")
+    masterCB:SetChecked(Kaneri_Tool_Settings.GlobalConfig.visibilidadActiva)
+    masterCB:SetScript("OnClick", function(self) 
+        Kaneri_Tool_Settings.GlobalConfig.visibilidadActiva = self:GetChecked()
+        print("|cffffcc00Kaneri Tool:|r Visibilidad dinámica " .. (self:GetChecked() and "|cff00ff00ACTIVADA|r" or "|cffff0000DESACTIVADA (HUD siempre visible)|r"))
+    end)
 
     local repairCB = CreateFrame("CheckButton", nil, panel, "InterfaceOptionsCheckButtonTemplate")
     repairCB:SetPoint("TOPLEFT", 350, -45); repairCB.Text:SetText("|cffffff00REPARAR|r")
@@ -122,7 +142,7 @@ local function SetupUI()
     sellCB:SetChecked(Kaneri_Tool_Settings.GlobalConfig.autoSell)
     sellCB:SetScript("OnClick", function(self) Kaneri_Tool_Settings.GlobalConfig.autoSell = self:GetChecked() end)
 
-    -- 1. ELEMENTOS (Estructura Ancha)
+    -- 1. ELEMENTOS
     local s1 = panel:CreateFontString(nil, "ARTWORK", "GameFontNormal")
     s1:SetPoint("TOPLEFT", 30, -85); s1:SetText("1. Configuración de Elementos (Individual)")
 
@@ -137,21 +157,17 @@ local function SetupUI()
         local row = CreateFrame("Frame", nil, scrollChild)
         row:SetSize(720, 28); row:SetPoint("TOPLEFT", 0, y)
 
-        -- Checkbox principal
         local cb = CreateFrame("CheckButton", nil, row, "InterfaceOptionsCheckButtonTemplate")
         cb:SetPoint("LEFT", 5, 0); cb:SetSize(24, 24)
         cb:SetChecked(Kaneri_Tool_Settings.Bars[data.id].enabled)
         cb:SetScript("OnClick", function(self) Kaneri_Tool_Settings.Bars[data.id].enabled = self:GetChecked() end)
 
-        -- Boton GLOBAL / CUSTOM (Más ancho)
         local mBtn = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
         mBtn:SetSize(80, 20); mBtn:SetPoint("LEFT", cb, "RIGHT", 5, 0)
         
-        -- Etiqueta nombre
         local txt = row:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
         txt:SetPoint("LEFT", mBtn, "RIGHT", 10, 0); txt:SetText(data.label); txt:SetWidth(140); txt:SetJustifyH("LEFT")
 
-        -- Contenedor de Opciones Custom (Palabras completas)
         local optFrame = CreateFrame("Frame", nil, row)
         optFrame:SetSize(450, 28); optFrame:SetPoint("LEFT", txt, "RIGHT", 10, 0)
 
@@ -189,7 +205,7 @@ local function SetupUI()
         Refresh()
     end
 
-    -- 2. ZONAS (Global) - Ajustado al nuevo ancho
+    -- 2. ZONAS (Global)
     local s2 = panel:CreateFontString(nil, "ARTWORK", "GameFontNormal")
     s2:SetPoint("TOP", 0, -340); s2:SetText("2. Comportamiento por Zona (Global)")
     local zDefs = {{l="Exteriores", c="z_world"}, {l="Ciudades", c="z_city"}, {l="Profundidades", c="z_delve"}, {l="Mazmorras", c="z_party"}, {l="Bandas", c="z_raid"}}
@@ -237,8 +253,15 @@ local ldr = CreateFrame("Frame")
 ldr:RegisterEvent("ADDON_LOADED")
 ldr:SetScript("OnEvent", function(self, event, addon)
     if addon ~= "Kaneri_Tool" then return end
-    local d = { forceShowAll=false, autoRepair=true, autoSell=true, combat=true, harm=true, exists=true, stealth=false, flying=true, z_party=0, z_raid=0, z_city=0, z_delve=0, z_world=0, delay=2 }
+    -- Inicializamos visibilidadActiva como TRUE por defecto para que el addon haga su trabajo al empezar
+    local d = { visibilidadActiva=true, autoRepair=true, autoSell=true, combat=true, harm=true, exists=true, stealth=false, flying=true, z_party=0, z_raid=0, z_city=0, z_delve=0, z_world=0, delay=2 }
     if not Kaneri_Tool_Settings then Kaneri_Tool_Settings = { GlobalConfig = d, Bars = {} } end
+    
+    -- Migración para la nueva variable si no existiera
+    if Kaneri_Tool_Settings.GlobalConfig.visibilidadActiva == nil then
+        Kaneri_Tool_Settings.GlobalConfig.visibilidadActiva = true
+    end
+
     for _, data in ipairs(barList) do
         if not Kaneri_Tool_Settings.Bars[data.id] then
             Kaneri_Tool_Settings.Bars[data.id] = { enabled = false, isCustom = false, customConfig = CopyTable(d) }
