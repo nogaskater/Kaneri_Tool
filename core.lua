@@ -85,48 +85,25 @@ engine:SetScript("OnUpdate", function(self, elapsed)
     lastFinalState = state
 end)
 
--- 5. Lógica de Vendedor Pro (Reparación y Venta en cola)
-local sellQueue = {}
-local totalProfit = 0
+-- 5. Lógica de Vendedor Pro (Reparación y Venta Nativa)
 local sellingFrame = CreateFrame("Frame")
-
-local function ProcessNextItem()
-    if #sellQueue > 0 then
-        local item = table.remove(sellQueue, 1)
-        C_Container.UseContainerItem(item.bag, item.slot)
-        -- Pequeño delay de 0.1s para no saturar el servidor y asegurar que venda todo
-        C_Timer.After(0.1, ProcessNextItem)
-    elseif totalProfit > 0 then
-        print(string.format("|cffffcc00Kaneri Tool:|r Chatarra vendida por %s.", GetCoinTextureString(totalProfit)))
-        totalProfit = 0
-    end
-end
 
 sellingFrame:RegisterEvent("MERCHANT_SHOW")
 sellingFrame:SetScript("OnEvent", function()
     if not Kaneri_Tool_Settings then return end
     local cfg = Kaneri_Tool_Settings.GlobalConfig
 
-    -- Iniciar venta si está activado
+    -- 1. Venta de Chatarra (Método Nativo de Blizzard)
     if cfg.autoSell then
-        sellQueue = {}
-        totalProfit = 0
-        for bag = 0, 4 do
-            for slot = 1, C_Container.GetContainerNumSlots(bag) do
-                local info = C_Container.GetContainerItemInfo(bag, slot)
-                if info and info.quality == 0 and not info.isLocked then
-                    local _, _, _, _, _, _, _, _, _, _, sellPrice = GetItemInfo(info.itemID)
-                    if sellPrice and sellPrice > 0 then
-                        totalProfit = totalProfit + (sellPrice * info.stackCount)
-                        table.insert(sellQueue, {bag = bag, slot = slot})
-                    end
-                end
-            end
+        -- C_MerchantFrame.SellAllJunkItems() es la función que pulsa el "botón" por ti
+        if C_MerchantFrame.GetNumJunkItems() > 0 then
+            C_MerchantFrame.SellAllJunkItems()
+            -- Nota: El mensaje de oro total lo suele dar el propio juego o addons de chat,
+            -- pero si quieres tu propio mensaje, tendrías que registrar MERCHANT_CLOSED.
         end
-        ProcessNextItem()
     end
 
-    -- Reparación instantánea
+    -- 2. Reparación instantánea
     if cfg.autoRepair and CanMerchantRepair() then
         local cost = GetRepairAllCost()
         if cost > 0 and GetMoney() >= cost then
